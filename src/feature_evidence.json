@@ -1,0 +1,160 @@
+{
+  "kind": "feature_evidence_report",
+  "features": [
+    {
+      "featureId": "feature-update-the-frontend-api-integration-to-fetch-violations-from-the-existing-node-js-backend-using-fetch-violations-relative-url-and-handle-the-response-schema-vehicleno-ownername-mobile-violationtype-timestamp-score-imageurl",
+      "featureTitle": "Update the frontend API integration to fetch violations from the existing Node.js backend using fetch('/violations') (relative URL) and handle the response schema: [{ vehicleNo, ownerName, mobile, violationType, timestamp, score, imageUrl }].",
+      "files": [
+        "frontend/src/lib/api.ts",
+        "frontend/src/pages/LiveViolationsPage.tsx"
+      ],
+      "components": [
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-10"
+      ],
+      "confidence": "high"
+    },
+    {
+      "featureId": "feature-modify-the-live-violations-view-to-match-the-requested-dashboard-table-live-updating-auto-refresh-every-3-seconds-violations-table-with-columns-time-vehicle-no-violation-type-score-proof-image-and-status",
+      "featureTitle": "Modify the Live Violations view to match the requested dashboard table: live-updating (auto-refresh every 3 seconds) violations table with columns Time, Vehicle No, Violation Type, Score, Proof Image, and Status.",
+      "files": [
+        "frontend/src/pages/LiveViolationsPage.tsx"
+      ],
+      "components": [
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-11"
+      ],
+      "confidence": "high"
+    },
+    {
+      "featureId": "feature-implement-proof-image-rendering-for-violations-using-the-node-js-uploads-convention-if-the-api-provides-a-filename-construct-the-url-as-http-localhost-3000-uploads-filename-if-the-api-provides-a-full-url-path-display-it-as-is",
+      "featureTitle": "Implement proof image rendering for violations using the Node.js uploads convention. If the API provides a filename, construct the URL as http://localhost:3000/uploads/<filename>; if the API provides a full URL/path, display it as-is.",
+      "files": [
+        "frontend/src/components/LatestViolationCard.tsx",
+        "frontend/src/lib/violations/images.ts",
+        "frontend/src/pages/LiveViolationsPage.tsx"
+      ],
+      "components": [
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-12"
+      ],
+      "confidence": "high"
+    },
+    {
+      "featureId": "feature-add-a-latest-violation-section-violation-cards-that-always-shows-the-newest-violation-at-the-top-with-a-large-proof-image-and-key-details-vehicle-number-violation-type-time-score",
+      "featureTitle": "Add a “Latest Violation” section (violation cards) that always shows the newest violation at the top with a large proof image and key details (vehicle number, violation type, time, score).",
+      "files": [
+        "frontend/src/pages/LiveViolationsPage.tsx"
+      ],
+      "components": [
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-13"
+      ],
+      "confidence": "high"
+    },
+    {
+      "featureId": "feature-implement-the-score-system-and-alert-banner-compute-the-total-score-from-the-currently-loaded-violations-when-total-score-is-greater-than-or-equal-to-5-show-a-red-alert-banner-with-the-exact-text-multiple-violations-data-sent-to-rto",
+      "featureTitle": "Implement the score system and alert banner: compute the total score from the currently loaded violations; when total score is greater than or equal to 5, show a red alert banner with the exact text: “MULTIPLE VIOLATIONS — DATA SENT TO RTO”.",
+      "files": [
+        "frontend/src/pages/LiveViolationsPage.tsx"
+      ],
+      "components": [
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-14"
+      ],
+      "confidence": "high"
+    },
+    {
+      "featureId": "feature-add-challan-generation-ui-as-a-modal-popup-challan-preview-that-can-be-opened-from-a-violation-or-the-latest-violation-card-and-displays-vehicle-number-owner-name-violation-list-total-fine-timestamp-and-proof-image-include-a-download-pdf-button-that-is-frontend-simulated-no-real-pdf-generation-required",
+      "featureTitle": "Add challan generation UI as a modal popup “Challan Preview” that can be opened from a violation (or the latest violation card) and displays: vehicle number, owner name, violation list, total fine, timestamp, and proof image; include a “Download PDF” button that is frontend-simulated (no real PDF generation required).",
+      "files": [
+        "frontend/src/components/ChallanPreviewModal.tsx",
+        "frontend/src/components/PortalLayout.tsx",
+        "frontend/src/components/notifications/PopupNotifications.tsx",
+        "frontend/src/pages/LiveViolationsPage.tsx"
+      ],
+      "components": [
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-15"
+      ],
+      "confidence": "high"
+    },
+    {
+      "featureId": "feature-implement-notification-simulation-popups-based-on-incoming-violation-updates-when-a-new-violation-is-detected-compared-to-the-previously-loaded-dataset-show-a-popup-with-the-exact-text-alert-sent-to-owner-if-multiple-violations-condition-is-met-total-score-5-show-a-popup-with-the-exact-text-report-sent-to-112",
+      "featureTitle": "Implement notification simulation popups based on incoming violation updates: when a new violation is detected compared to the previously loaded dataset, show a popup with the exact text “Alert sent to owner”; if multiple violations condition is met (total score ≥ 5), show a popup with the exact text “Report sent to 112”.",
+      "files": [
+        "frontend/src/components/notifications/PopupNotifications.tsx",
+        "frontend/src/pages/LiveViolationsPage.tsx"
+      ],
+      "components": [
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-16"
+      ],
+      "confidence": "high"
+    },
+    {
+      "featureId": "feature-add-react-router-pages-to-match-the-requested-information-architecture-a-vehicle-details-page-equivalent-to-vehicle-html-and-a-challan-preview-page-equivalent-to-challan-html-and-update-the-navigation-to-include-these-pages-where-appropriate",
+      "featureTitle": "Add React Router pages to match the requested information architecture: a Vehicle Details page (equivalent to vehicle.html) and a Challan Preview page (equivalent to challan.html), and update the navigation to include these pages where appropriate.",
+      "files": [
+        "frontend/src/App.tsx",
+        "frontend/src/components/PortalNav.tsx",
+        "frontend/src/pages/ChallanPreviewPage.tsx",
+        "frontend/src/pages/LiveViolationsPage.tsx",
+        "frontend/src/pages/VehicleDetailsPage.tsx"
+      ],
+      "components": [
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-17"
+      ],
+      "confidence": "high"
+    }
+  ]
+}

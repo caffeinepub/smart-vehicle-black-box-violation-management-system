@@ -1,2 +1,3 @@
-# smart-vehicle-black-box-violation-management-system
-Exported from Caffeine project: Smart Vehicle Black Box &amp; Violation Management System
+## 
+
+To run app build and run docker image: `docker build -t app . docker run -it --network host app`

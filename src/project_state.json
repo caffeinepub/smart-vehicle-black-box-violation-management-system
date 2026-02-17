@@ -1,0 +1,197 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectStateVersion": 5,
+  "summary": "Professional, responsive, government-style web dashboard for a Vehicle AI Safety Black Box system, built with pure HTML/CSS/JS (no frameworks), consuming an existing Node.js backend (GET /violations) to show live-updating violations, proof images from /uploads, score-based alerts, challan preview UI, and notification simulations across multiple static pages (index/vehicle/challan).",
+  "architectural_notes": [
+    "Demo mode: no authentication required",
+    "UI constraints: official/government style (white background, dark blue headers), no animations/fancy effects",
+    "Must handle empty API responses with clear empty states",
+    "Backend API endpoint: GET /violations (Node.js backend; use fetch('/violations'))",
+    "Images served from /uploads and accessible at http://localhost:3000/uploads/<filename>",
+    "Must be pure HTML/CSS/JS (no frameworks)",
+    "Auto-refresh violations every 3 seconds",
+    "Required pages: index.html (dashboard), vehicle.html (vehicle details), challan.html (challan preview)"
+  ],
+  "known_issues": [],
+  "isFixRequest": false,
+  "existing_features": [
+    {
+      "id": "feature-create-a-professional-government-official-style-responsive-dashboard-layout-mobile-desktop-with-a-white-background-and-dark-blue-headers-and-no-animations-or-fancy-visual-effects",
+      "title": "Create a professional, government/official-style responsive dashboard layout (mobile + desktop) with a white background and dark-blue headers, and no animations or fancy visual effects.",
+      "reqIds": [
+        "REQ-1"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-implement-frontend-routing-navigation-with-these-pages-home-dashboard-live-violations-and-challan-management-presented-as-an-official-portal-e-g-top-header-simple-navigation",
+      "title": "Implement frontend routing/navigation with these pages: Home/Dashboard, Live Violations, and Challan Management, presented as an official portal (e.g., top header + simple navigation).",
+      "reqIds": [
+        "REQ-2"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-build-the-home-dashboard-page-with-the-title-smart-vehicle-black-box-system-live-monitoring-and-a-short-description-about-monitoring-vehicle-safety-violations-and-challans",
+      "title": "Build the Home/Dashboard page with the title “Smart Vehicle Black Box System – Live Monitoring” and a short description about monitoring vehicle safety, violations, and challans.",
+      "reqIds": [
+        "REQ-3"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-implement-the-live-violations-page-that-fetches-real-data-from-https-vehicle-blackbox-system-onrender-com-api-violations-using-javascript-fetch-and-displays-results-in-a-table-with-columns-vehicle-number-violation-type-severity-timestamp",
+      "title": "Implement the Live Violations page that fetches real data from https://vehicle-blackbox-system.onrender.com/api/violations using JavaScript fetch(), and displays results in a table with columns: Vehicle Number, Violation Type, Severity, Timestamp.",
+      "reqIds": [
+        "REQ-4"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-add-auto-refresh-on-the-live-violations-page-to-re-fetch-api-violations-every-few-seconds-and-update-the-table-accordingly",
+      "title": "Add auto-refresh on the Live Violations page to re-fetch /api/violations every few seconds and update the table accordingly.",
+      "reqIds": [
+        "REQ-5"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-implement-the-challan-management-page-that-fetches-real-data-from-https-vehicle-blackbox-system-onrender-com-api-challans-using-javascript-fetch-and-displays-vehicle-number-violations-list-fine-amount-and-status-warning-challan-issued",
+      "title": "Implement the Challan Management page that fetches real data from https://vehicle-blackbox-system.onrender.com/api/challans using JavaScript fetch(), and displays: Vehicle Number, Violations List, Fine Amount, and Status (Warning / Challan Issued).",
+      "reqIds": [
+        "REQ-6"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-add-a-violation-evidence-section-on-the-challan-management-page-or-within-each-challan-record-that-displays-images-if-image-urls-are-present-in-the-api-response-labeled-clearly-as-driver-camera-and-road-camera",
+      "title": "Add a Violation Evidence section on the Challan Management page (or within each challan/record) that displays images if image URLs are present in the API response, labeled clearly as “Driver Camera” and “Road Camera”.",
+      "reqIds": [
+        "REQ-7"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-handle-empty-data-states-for-violations-and-challans-e-g-show-no-violations-recorded-yet-when-api-violations-returns-empty-and-avoid-showing-blank-screens",
+      "title": "Handle empty data states for violations and challans (e.g., show “No violations recorded yet” when /api/violations returns empty), and avoid showing blank screens.",
+      "reqIds": [
+        "REQ-8"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-implement-the-app-in-demo-mode-with-no-authentication-no-internet-identity-login-requirement-and-ensure-the-primary-flows-view-violations-view-challans-view-evidence-work-without-signing-in",
+      "title": "Implement the app in demo mode with no authentication (no Internet Identity login requirement) and ensure the primary flows (view violations, view challans, view evidence) work without signing in.",
+      "reqIds": [
+        "REQ-9"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-update-the-frontend-api-integration-to-fetch-violations-from-the-existing-node-js-backend-using-fetch-violations-relative-url-and-handle-the-response-schema-vehicleno-ownername-mobile-violationtype-timestamp-score-imageurl",
+      "title": "Update the frontend API integration to fetch violations from the existing Node.js backend using fetch('/violations') (relative URL) and handle the response schema: [{ vehicleNo, ownerName, mobile, violationType, timestamp, score, imageUrl }].",
+      "reqIds": [
+        "REQ-10"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-modify-the-live-violations-view-to-match-the-requested-dashboard-table-live-updating-auto-refresh-every-3-seconds-violations-table-with-columns-time-vehicle-no-violation-type-score-proof-image-and-status",
+      "title": "Modify the Live Violations view to match the requested dashboard table: live-updating (auto-refresh every 3 seconds) violations table with columns Time, Vehicle No, Violation Type, Score, Proof Image, and Status.",
+      "reqIds": [
+        "REQ-11"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-implement-proof-image-rendering-for-violations-using-the-node-js-uploads-convention-if-the-api-provides-a-filename-construct-the-url-as-http-localhost-3000-uploads-filename-if-the-api-provides-a-full-url-path-display-it-as-is",
+      "title": "Implement proof image rendering for violations using the Node.js uploads convention. If the API provides a filename, construct the URL as http://localhost:3000/uploads/<filename>; if the API provides a full URL/path, display it as-is.",
+      "reqIds": [
+        "REQ-12"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-add-a-latest-violation-section-violation-cards-that-always-shows-the-newest-violation-at-the-top-with-a-large-proof-image-and-key-details-vehicle-number-violation-type-time-score",
+      "title": "Add a “Latest Violation” section (violation cards) that always shows the newest violation at the top with a large proof image and key details (vehicle number, violation type, time, score).",
+      "reqIds": [
+        "REQ-13"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-implement-the-score-system-and-alert-banner-compute-the-total-score-from-the-currently-loaded-violations-when-total-score-is-greater-than-or-equal-to-5-show-a-red-alert-banner-with-the-exact-text-multiple-violations-data-sent-to-rto",
+      "title": "Implement the score system and alert banner: compute the total score from the currently loaded violations; when total score is greater than or equal to 5, show a red alert banner with the exact text: “MULTIPLE VIOLATIONS — DATA SENT TO RTO”.",
+      "reqIds": [
+        "REQ-14"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-add-challan-generation-ui-as-a-modal-popup-challan-preview-that-can-be-opened-from-a-violation-or-the-latest-violation-card-and-displays-vehicle-number-owner-name-violation-list-total-fine-timestamp-and-proof-image-include-a-download-pdf-button-that-is-frontend-simulated-no-real-pdf-generation-required",
+      "title": "Add challan generation UI as a modal popup “Challan Preview” that can be opened from a violation (or the latest violation card) and displays: vehicle number, owner name, violation list, total fine, timestamp, and proof image; include a “Download PDF” button that is frontend-simulated (no real PDF generation required).",
+      "reqIds": [
+        "REQ-15"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-implement-notification-simulation-popups-based-on-incoming-violation-updates-when-a-new-violation-is-detected-compared-to-the-previously-loaded-dataset-show-a-popup-with-the-exact-text-alert-sent-to-owner-if-multiple-violations-condition-is-met-total-score-5-show-a-popup-with-the-exact-text-report-sent-to-112",
+      "title": "Implement notification simulation popups based on incoming violation updates: when a new violation is detected compared to the previously loaded dataset, show a popup with the exact text “Alert sent to owner”; if multiple violations condition is met (total score ≥ 5), show a popup with the exact text “Report sent to 112”.",
+      "reqIds": [
+        "REQ-16"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-add-react-router-pages-to-match-the-requested-information-architecture-a-vehicle-details-page-equivalent-to-vehicle-html-and-a-challan-preview-page-equivalent-to-challan-html-and-update-the-navigation-to-include-these-pages-where-appropriate",
+      "title": "Add React Router pages to match the requested information architecture: a Vehicle Details page (equivalent to vehicle.html) and a Challan Preview page (equivalent to challan.html), and update the navigation to include these pages where appropriate.",
+      "reqIds": [
+        "REQ-17"
+      ],
+      "version": 1
+    }
+  ],
+  "new_feature_requests": [
+    {
+      "id": "AR-1",
+      "summary": "Dashboard (index.html): live-updating violations table (auto-refresh every 3s) with columns Time, Vehicle No, Violation Type, Score, Proof Image, Status",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-2",
+      "summary": "Violation Cards: show latest violation at top with large proof image",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-3",
+      "summary": "Score system + alert banner: when total score ≥ 5 show red banner “MULTIPLE VIOLATIONS — DATA SENT TO RTO”",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-4",
+      "summary": "Challan Generation UI: modal challan preview (vehicle no, owner name, violation list, total fine, timestamp, proof image) with simulated Download PDF button",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-5",
+      "summary": "Notification simulation: on violation show popup “Alert sent to owner”; if multiple violations show popup “Report sent to 112”",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-6",
+      "summary": "Pure HTML/CSS/JS (no React/frameworks); fetch data via fetch('/violations'); mobile responsive; include pages: index.html (dashboard), vehicle.html (vehicle details), challan.html (challan preview)",
+      "reqIds": [],
+      "status": "pending"
+    }
+  ],
+  "gameProjectType": "none",
+  "projectName": "Smart Vehicle Black Box & Violation Management System",
+  "clarification_mode": "instant",
+  "clarification_rounds": 0
+}

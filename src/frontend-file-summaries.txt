@@ -1,0 +1,21 @@
+{
+  "frontend/src/App.tsx": "Main application component with TanStack Router configuration for five pages (Dashboard, Live Violations, Challan Management, Vehicle Details, Challan Preview) wrapped in PortalLayout with Sonner toast notifications.",
+  "frontend/src/main.tsx": "Application entry point with QueryClientProvider, removed InternetIdentityProvider for demo mode without authentication.",
+  "frontend/src/components/PortalLayout.tsx": "Government portal layout with header, navigation, main content area, footer with dynamic year and UTM-tracked caffeine.ai attribution, and integrated popup notifications container.",
+  "frontend/src/components/PortalNav.tsx": "Navigation component with links to Dashboard, Live Violations, Vehicle Details, and Challan Preview pages with active state styling.",
+  "frontend/src/pages/DashboardPage.tsx": "Home page displaying system title \"Smart Vehicle Black Box System – Live Monitoring\" with description and feature cards.",
+  "frontend/src/pages/LiveViolationsPage.tsx": "Live violations dashboard with 3-second auto-refresh, latest violation card, violations table (Time, Vehicle No, Violation Type, Score, Proof Image, Status columns), total score calculation, red alert banner when score ≥ 5, and notification triggers for new violations and RTO reports.",
+  "frontend/src/pages/ChallanManagementPage.tsx": "Challan management page that groups violations by vehicle number, displays total fines and scores per vehicle, and provides navigation to challan preview and vehicle details pages.",
+  "frontend/src/components/EvidenceSection.tsx": "Component to display violation evidence images labeled as \"Driver Camera\" and \"Road Camera\" with fallback for missing images.",
+  "frontend/src/components/EmptyState.tsx": "Reusable empty state component displaying consistent message when no data is available.",
+  "frontend/src/lib/api.ts": "API utility that fetches violations from relative '/violations' endpoint using Node.js schema with error handling, and includes a legacy fetchChallans stub for backward compatibility.",
+  "frontend/src/hooks/useInterval.ts": "Custom React hook for safe interval polling with proper cleanup on unmount, fixed to initialize useRef with null value.",
+  "frontend/src/index.css": "Global styles with government portal color scheme (dark blue headers, white background) using OKLCH color system, no animations.",
+  "frontend/tailwind.config.js": "Tailwind configuration with animation plugin removed to comply with no-animations requirement for official portal aesthetic.",
+  "frontend/src/lib/violations/images.ts": "Helper function to normalize violation image URLs by prefixing localhost uploads path for filename-only values while preserving absolute URLs.",
+  "frontend/src/components/LatestViolationCard.tsx": "Card component displaying the newest violation with large proof image, vehicle details, owner info, score, and action buttons for viewing challan and vehicle details.",
+  "frontend/src/components/notifications/PopupNotifications.tsx": "Non-blocking popup notification system with auto-dismiss functionality for displaying alerts (\"Alert sent to owner\") and reports (\"Report sent to 112\") with queue management.",
+  "frontend/src/components/ChallanPreviewModal.tsx": "Modal dialog displaying challan preview with vehicle details, violation information, calculated fine amount, proof image, and simulated PDF download action.",
+  "frontend/src/pages/VehicleDetailsPage.tsx": "Vehicle details page showing owner information and complete violation history for a specific vehicle with score totals and proof images.",
+  "frontend/src/pages/ChallanPreviewPage.tsx": "Full-page challan preview displaying official traffic violation challan with vehicle details, violation list, fine calculation, proof image, and simulated PDF download."
+}

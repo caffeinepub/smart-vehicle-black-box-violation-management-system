@@ -1,0 +1,191 @@
+{
+  "kind": "implementation_plan",
+  "version": "1.0",
+  "title": "Vehicle Safety Black Box — Live Violations dashboard updates (local /violations, alerts, proof images, challan preview, notifications, new pages)",
+  "requirements": [
+    {
+      "id": "REQ-10",
+      "summary": "Switch violation fetching to relative fetch('/violations') and render Node.js schema with robust error handling.",
+      "acceptanceCriteria": [
+        "The app uses a relative request to '/violations' (not the existing https://vehicle-blackbox-system.onrender.com endpoints) when loading live violation data.",
+        "The UI renders violation fields using the Node.js schema keys (vehicleNo, ownerName, mobile, violationType, timestamp, score, imageUrl).",
+        "Network errors and non-200 responses show a clear error state instead of a blank screen."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/lib/api.ts",
+          "operation": "modify",
+          "description": "Replace the hardcoded remote base URL + '/api/violations' usage with a relative fetch('/violations') capability, align typing/normalization to the Node.js schema (vehicleNo, ownerName, mobile, violationType, timestamp, score, imageUrl), and ensure non-OK + network failures surface as user-friendly errors."
+        },
+        {
+          "path": "frontend/src/pages/LiveViolationsPage.tsx",
+          "operation": "modify",
+          "description": "Update the Live Violations page to consume the updated violations loader from frontend/src/lib/api.ts, using the Node.js schema keys throughout the UI and ensuring error/empty states are rendered (no blank screen)."
+        }
+      ]
+    },
+    {
+      "id": "REQ-11",
+      "summary": "Update Live Violations view to a live-updating table (3s refresh) with specified columns and non-empty per-row status.",
+      "acceptanceCriteria": [
+        "Violations data refreshes every 3 seconds while the user is on the live violations/dashboard view.",
+        "The table includes the specified columns and formats Time from the timestamp field into a readable local date/time.",
+        "Proof Image displays a thumbnail when an image is available.",
+        "Status is displayed for each row (e.g., a badge) and is not empty for any rendered row."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/LiveViolationsPage.tsx",
+          "operation": "modify",
+          "description": "Rework the table to the requested columns (Time, Vehicle No, Violation Type, Score, Proof Image, Status), switch auto-refresh interval to 3000ms using the existing useInterval hook, format Time from timestamp to locale string, render score, and implement a deterministic non-empty Status label (e.g., 'New', 'Escalated') shown as a badge."
+        }
+      ]
+    },
+    {
+      "id": "REQ-12",
+      "summary": "Render proof images using the Node.js uploads convention with filename-to-localhost URL construction and placeholders.",
+      "acceptanceCriteria": [
+        "For a violation with imageUrl='abc.jpg', the UI requests and displays 'http://localhost:3000/uploads/abc.jpg'.",
+        "If imageUrl is already an absolute URL, the UI displays that URL without re-prefixing.",
+        "If no imageUrl is present, the UI shows a clear placeholder (e.g., “No image”)."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/lib/violations/images.ts",
+          "operation": "create",
+          "description": "Add a small helper to normalize violation.imageUrl into a displayable URL: prefix http://localhost:3000/uploads/ for filename-only values; leave absolute URLs/paths unchanged; return an empty value when missing."
+        },
+        {
+          "path": "frontend/src/pages/LiveViolationsPage.tsx",
+          "operation": "modify",
+          "description": "Use the image URL normalization helper to render Proof Image thumbnails in the table, avoid re-prefixing absolute URLs, and show a clear 'No image' placeholder when imageUrl is absent."
+        },
+        {
+          "path": "frontend/src/components/LatestViolationCard.tsx",
+          "operation": "create",
+          "description": "Create a reusable LatestViolationCard component that includes a large proof image (using the same URL normalization helper) and graceful fallbacks when no image is available."
+        }
+      ]
+    },
+    {
+      "id": "REQ-13",
+      "summary": "Add a Latest Violation section above the table showing the newest violation with a large proof image and key details.",
+      "acceptanceCriteria": [
+        "When at least one violation exists, the newest violation (by timestamp) is displayed prominently above the table.",
+        "The latest violation section includes a large proof image when available and falls back gracefully when not available.",
+        "When the dataset is empty, the section is not shown and an empty-state message is displayed."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/LiveViolationsPage.tsx",
+          "operation": "modify",
+          "description": "Compute the newest violation by timestamp, render a 'Latest Violation' section above the table using the LatestViolationCard component, and show an explicit empty-state message (via EmptyState) when no violations exist."
+        }
+      ]
+    },
+    {
+      "id": "REQ-14",
+      "summary": "Compute total score from loaded violations and show the exact red alert banner when total score ≥ 5.",
+      "acceptanceCriteria": [
+        "The UI computes total score as the sum of violation.score values in the current dataset.",
+        "When the computed total score is >= 5, a prominent red banner is shown with the exact required text.",
+        "When total score falls below 5 (e.g., during testing with fewer violations), the banner is not shown."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/LiveViolationsPage.tsx",
+          "operation": "modify",
+          "description": "Add total score computation from currently loaded violations and conditionally render a prominent red banner with the exact text “MULTIPLE VIOLATIONS — DATA SENT TO RTO” when totalScore >= 5."
+        }
+      ]
+    },
+    {
+      "id": "REQ-15",
+      "summary": "Add a Challan Preview modal popup with required fields and a simulated Download PDF action.",
+      "acceptanceCriteria": [
+        "A challan preview modal can be opened and closed without navigation reloads.",
+        "The modal displays the required fields populated from the selected violation(s).",
+        "The “Download PDF” button performs a simulated action (e.g., triggers a toast/dialog) and does not require backend support or a real PDF file."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/ChallanPreviewModal.tsx",
+          "operation": "create",
+          "description": "Implement a Tailwind-based modal component ('Challan Preview') that can be opened/closed without navigation, displaying vehicle number, owner name, violation list, total fine (frontend-calculated), timestamp, and proof image; include a 'Download PDF' button that triggers a simulated UX action."
+        },
+        {
+          "path": "frontend/src/components/notifications/PopupNotifications.tsx",
+          "operation": "create",
+          "description": "Add a lightweight, non-blocking popup/toast system component to support simulated actions like the challan 'Download PDF' confirmation and other required popups."
+        },
+        {
+          "path": "frontend/src/components/PortalLayout.tsx",
+          "operation": "modify",
+          "description": "Wire the popup/toast container into the global layout so popups can display above any page content."
+        },
+        {
+          "path": "frontend/src/pages/LiveViolationsPage.tsx",
+          "operation": "modify",
+          "description": "Add an 'Open Challan Preview' action from each violation row and from the Latest Violation card to open ChallanPreviewModal with the selected violation context and required fields."
+        }
+      ]
+    },
+    {
+      "id": "REQ-16",
+      "summary": "Simulate notification popups when new violations arrive and when total score reaches ≥ 5 with exact required texts.",
+      "acceptanceCriteria": [
+        "When a violation appears that was not present on the prior refresh, the UI shows a popup with the exact text “Alert sent to owner”.",
+        "When total score reaches >= 5, the UI shows a popup with the exact text “Report sent to 112”.",
+        "Popups do not block the UI and can be dismissed or auto-dismiss after a short time."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/LiveViolationsPage.tsx",
+          "operation": "modify",
+          "description": "Track the previously loaded violations (e.g., by a stable derived key) to detect newly appearing items on refresh; when detected, trigger a non-blocking popup with exact text “Alert sent to owner”; when totalScore becomes >= 5, trigger a non-blocking popup with exact text “Report sent to 112”, ensuring popups auto-dismiss and/or are dismissible."
+        },
+        {
+          "path": "frontend/src/components/notifications/PopupNotifications.tsx",
+          "operation": "modify",
+          "description": "Extend the popup/toast system to support multiple queued messages, auto-dismiss timing, and manual dismissal so notifications do not block the UI."
+        }
+      ]
+    },
+    {
+      "id": "REQ-17",
+      "summary": "Add routes and navigation/links for Vehicle Details and Challan Preview pages and wire them into the app IA.",
+      "acceptanceCriteria": [
+        "The app includes routes for vehicle details and challan preview pages accessible via in-app navigation/links.",
+        "The vehicle details page shows relevant data for a selected vehicle (derived from loaded violations, at minimum vehicleNo, ownerName, mobile, and related violations if available).",
+        "The challan preview page shows the challan preview content in a full-page format in addition to the modal option."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/VehicleDetailsPage.tsx",
+          "operation": "create",
+          "description": "Create a Vehicle Details page that displays at minimum vehicleNo, ownerName, mobile, and related violations derived from the currently loaded violations dataset (with graceful empty/error handling when data is unavailable)."
+        },
+        {
+          "path": "frontend/src/pages/ChallanPreviewPage.tsx",
+          "operation": "create",
+          "description": "Create a full-page Challan Preview view that renders the same challan content as the modal (vehicle number, owner name, violation list, total fine, timestamp, proof image) and includes the simulated 'Download PDF' action."
+        },
+        {
+          "path": "frontend/src/App.tsx",
+          "operation": "modify",
+          "description": "Add route registrations for the new Vehicle Details and Challan Preview pages within the existing TanStack Router setup, ensuring both pages are reachable via in-app navigation/links."
+        },
+        {
+          "path": "frontend/src/components/PortalNav.tsx",
+          "operation": "modify",
+          "description": "Update top navigation to include links to Vehicle Details and Challan Preview pages where appropriate (ensuring they remain accessible via in-app navigation/links)."
+        },
+        {
+          "path": "frontend/src/pages/LiveViolationsPage.tsx",
+          "operation": "modify",
+          "description": "Wire navigation links from the violations table/latest card to the Vehicle Details route (for the selected vehicleNo) and to the full-page Challan Preview route (for the selected context), in addition to the modal option."
+        }
+      ]
+    }
+  ]
+}

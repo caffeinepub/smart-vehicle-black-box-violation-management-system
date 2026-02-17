@@ -1,0 +1,150 @@
+{
+  "kind": "coverage_report",
+  "version": "1.0",
+  "generatedAt": "2026-02-17T17:52:13.848Z",
+  "sources": {
+    "buildRequest": true,
+    "implementationPlan": true
+  },
+  "requirements": {
+    "total": 8,
+    "implemented": 8,
+    "items": [
+      {
+        "id": "REQ-10",
+        "summary": "Update the frontend API integration to fetch violations from the existing Node.js backend using fetch('/violations') (relative URL) and handle the response schema: [{ vehicleNo, ownerName, mobile, violationType, timestamp, score, imageUrl }].",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/lib/api.ts",
+          "frontend/src/pages/LiveViolationsPage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/lib/api.ts",
+          "frontend/src/pages/LiveViolationsPage.tsx"
+        ]
+      },
+      {
+        "id": "REQ-11",
+        "summary": "Modify the Live Violations view to match the requested dashboard table: live-updating (auto-refresh every 3 seconds) violations table with columns Time, Vehicle No, Violation Type, Score, Proof Image, and Status.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/LiveViolationsPage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/LiveViolationsPage.tsx"
+        ]
+      },
+      {
+        "id": "REQ-12",
+        "summary": "Implement proof image rendering for violations using the Node.js uploads convention. If the API provides a filename, construct the URL as http://localhost:3000/uploads/<filename>; if the API provides a full URL/path, display it as-is.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/lib/violations/images.ts",
+          "frontend/src/pages/LiveViolationsPage.tsx",
+          "frontend/src/components/LatestViolationCard.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/lib/violations/images.ts",
+          "frontend/src/pages/LiveViolationsPage.tsx",
+          "frontend/src/components/LatestViolationCard.tsx"
+        ]
+      },
+      {
+        "id": "REQ-13",
+        "summary": "Add a “Latest Violation” section (violation cards) that always shows the newest violation at the top with a large proof image and key details (vehicle number, violation type, time, score).",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/LiveViolationsPage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/LiveViolationsPage.tsx"
+        ]
+      },
+      {
+        "id": "REQ-14",
+        "summary": "Implement the score system and alert banner: compute the total score from the currently loaded violations; when total score is greater than or equal to 5, show a red alert banner with the exact text: “MULTIPLE VIOLATIONS — DATA SENT TO RTO”.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/LiveViolationsPage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/LiveViolationsPage.tsx"
+        ]
+      },
+      {
+        "id": "REQ-15",
+        "summary": "Add challan generation UI as a modal popup “Challan Preview” that can be opened from a violation (or the latest violation card) and displays: vehicle number, owner name, violation list, total fine, timestamp, and proof image; include a “Download PDF” button that is frontend-simulated (no real PDF generation required).",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/components/ChallanPreviewModal.tsx",
+          "frontend/src/components/notifications/PopupNotifications.tsx",
+          "frontend/src/components/PortalLayout.tsx",
+          "frontend/src/pages/LiveViolationsPage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/components/ChallanPreviewModal.tsx",
+          "frontend/src/components/notifications/PopupNotifications.tsx",
+          "frontend/src/components/PortalLayout.tsx",
+          "frontend/src/pages/LiveViolationsPage.tsx"
+        ]
+      },
+      {
+        "id": "REQ-16",
+        "summary": "Implement notification simulation popups based on incoming violation updates: when a new violation is detected compared to the previously loaded dataset, show a popup with the exact text “Alert sent to owner”; if multiple violations condition is met (total score ≥ 5), show a popup with the exact text “Report sent to 112”.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/LiveViolationsPage.tsx",
+          "frontend/src/components/notifications/PopupNotifications.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/LiveViolationsPage.tsx",
+          "frontend/src/components/notifications/PopupNotifications.tsx"
+        ]
+      },
+      {
+        "id": "REQ-17",
+        "summary": "Add React Router pages to match the requested information architecture: a Vehicle Details page (equivalent to vehicle.html) and a Challan Preview page (equivalent to challan.html), and update the navigation to include these pages where appropriate.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/VehicleDetailsPage.tsx",
+          "frontend/src/pages/ChallanPreviewPage.tsx",
+          "frontend/src/App.tsx",
+          "frontend/src/components/PortalNav.tsx",
+          "frontend/src/pages/LiveViolationsPage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/VehicleDetailsPage.tsx",
+          "frontend/src/pages/ChallanPreviewPage.tsx",
+          "frontend/src/App.tsx",
+          "frontend/src/components/PortalNav.tsx",
+          "frontend/src/pages/LiveViolationsPage.tsx"
+        ]
+      }
+    ]
+  },
+  "changedFiles": [
+    "build-request.json",
+    "build-template/README.md",
+    "caffeine.lock.json",
+    "feature_evidence.json",
+    "frontend-file-summaries.txt",
+    "frontend-implementation-plan.json",
+    "frontend/src/App.tsx",
+    "frontend/src/components/ChallanPreviewModal.tsx",
+    "frontend/src/components/LatestViolationCard.tsx",
+    "frontend/src/components/PortalLayout.tsx",
+    "frontend/src/components/PortalNav.tsx",
+    "frontend/src/components/notifications/PopupNotifications.tsx",
+    "frontend/src/config.ts",
+    "frontend/src/lib/api.ts",
+    "frontend/src/lib/violations/images.ts",
+    "frontend/src/pages/ChallanManagementPage.tsx",
+    "frontend/src/pages/ChallanPreviewPage.tsx",
+    "frontend/src/pages/LiveViolationsPage.tsx",
+    "frontend/src/pages/VehicleDetailsPage.tsx",
+    "project_state.json",
+    "scratch/component-selection.json",
+    "spec.md",
+    "spec_vs_diff_report.json"
+  ]
+}

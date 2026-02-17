@@ -1,0 +1,50 @@
+{
+  "kind": "spec_vs_diff_report",
+  "version": "1.0",
+  "generatedAt": "2026-02-17T17:52:13.845Z",
+  "summary": "Most requested frontend features appear to be implemented: relative '/violations' fetching with Node schema, 3s auto-refresh live violations table with required columns (incl. proof thumbnail + status), image URL normalization for /uploads, latest violation card, challan preview modal + full-page challan preview, popup notifications with exact required messages, and new routes/navigation for Vehicle Details and Challan Preview. One requirement cannot be fully verified from the truncated diff: the exact alert banner text for the score threshold.",
+  "missing_requirements": [
+    {
+      "id": "REQ-14",
+      "requirement": "When total score is >= 5, show a prominent red alert banner with the exact text: “MULTIPLE VIOLATIONS — DATA SENT TO RTO”.",
+      "reason": "The diff summary indicates a red alert banner exists when score ≥ 5, but the truncated LiveViolationsPage excerpt does not show the banner’s exact rendered string, so compliance with the required exact text cannot be confirmed from provided evidence.",
+      "evidence": [
+        "frontend/src/pages/LiveViolationsPage.tsx (truncated)",
+        "frontend-file-summaries.txt (mentions red alert banner but not the exact text)"
+      ]
+    }
+  ],
+  "hallucinated_features": [
+    {
+      "description": "Switched/removed authentication provider in the app entry point for “demo mode without authentication”.",
+      "reason": "The BuildRequest did not request changing the app bootstrap/auth provider wiring; it only stated a non-goal that authentication should not be added. The diff summary explicitly mentions removing InternetIdentityProvider from main.tsx.",
+      "evidence": [
+        "frontend-file-summaries.txt (\"frontend/src/main.tsx\": \"removed InternetIdentityProvider for demo mode without authentication.\")"
+      ]
+    },
+    {
+      "description": "Removed Tailwind animation plugin to comply with a 'no-animations' requirement.",
+      "reason": "The BuildRequest did not request changing Tailwind configuration or removing animation plugins; this is an additional stylistic/config change beyond the specified REQ-10..REQ-17 scope.",
+      "evidence": [
+        "frontend-file-summaries.txt (\"frontend/tailwind.config.js\": \"animation plugin removed...\")"
+      ]
+    }
+  ],
+  "confidence": 0.68,
+  "changed_files": [
+    "frontend-file-summaries.txt",
+    "frontend/src/App.tsx",
+    "frontend/src/components/ChallanPreviewModal.tsx",
+    "frontend/src/components/LatestViolationCard.tsx",
+    "frontend/src/components/PortalLayout.tsx",
+    "frontend/src/components/PortalNav.tsx",
+    "frontend/src/components/notifications/PopupNotifications.tsx",
+    "frontend/src/lib/api.ts",
+    "frontend/src/lib/violations/images.ts",
+    "frontend/src/pages/ChallanManagementPage.tsx",
+    "frontend/src/pages/ChallanPreviewPage.tsx",
+    "frontend/src/pages/LiveViolationsPage.tsx",
+    "frontend/src/pages/VehicleDetailsPage.tsx",
+    "project_state.json"
+  ]
+}
