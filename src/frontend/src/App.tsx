@@ -1,11 +1,17 @@
-import { createRouter, createRoute, createRootRoute, RouterProvider, Outlet } from '@tanstack/react-router';
-import { Toaster } from '@/components/ui/sonner';
-import PortalLayout from './components/PortalLayout';
-import DashboardPage from './pages/DashboardPage';
-import LiveViolationsPage from './pages/LiveViolationsPage';
-import ChallanManagementPage from './pages/ChallanManagementPage';
-import VehicleDetailsPage from './pages/VehicleDetailsPage';
-import ChallanPreviewPage from './pages/ChallanPreviewPage';
+import { Toaster } from "@/components/ui/sonner";
+import {
+  Outlet,
+  RouterProvider,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
+import PortalLayout from "./components/PortalLayout";
+import ChallanManagementPage from "./pages/ChallanManagementPage";
+import ChallanPreviewPage from "./pages/ChallanPreviewPage";
+import DashboardPage from "./pages/DashboardPage";
+import LiveViolationsPage from "./pages/LiveViolationsPage";
+import VehicleDetailsPage from "./pages/VehicleDetailsPage";
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -18,31 +24,31 @@ const rootRoute = createRootRoute({
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/',
+  path: "/",
   component: DashboardPage,
 });
 
 const violationsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/violations',
+  path: "/violations",
   component: LiveViolationsPage,
 });
 
 const challansRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/challans',
+  path: "/challans",
   component: ChallanManagementPage,
 });
 
 const vehicleDetailsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/vehicle-details',
+  path: "/vehicle-details",
   component: VehicleDetailsPage,
 });
 
 const challanPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/challan-preview',
+  path: "/challan-preview",
   component: ChallanPreviewPage,
 });
 
@@ -56,7 +62,7 @@ const routeTree = rootRoute.addChildren([
 
 const router = createRouter({ routeTree });
 
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
   }

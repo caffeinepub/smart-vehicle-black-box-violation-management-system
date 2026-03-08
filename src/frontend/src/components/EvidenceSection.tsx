@@ -1,11 +1,14 @@
-import { Camera } from 'lucide-react';
+import { Camera } from "lucide-react";
 
 interface EvidenceSectionProps {
   driverCameraUrl?: string;
   roadCameraUrl?: string;
 }
 
-export default function EvidenceSection({ driverCameraUrl, roadCameraUrl }: EvidenceSectionProps) {
+export default function EvidenceSection({
+  driverCameraUrl,
+  roadCameraUrl,
+}: EvidenceSectionProps) {
   const hasEvidence = driverCameraUrl || roadCameraUrl;
 
   if (!hasEvidence) {
@@ -32,7 +35,8 @@ export default function EvidenceSection({ driverCameraUrl, roadCameraUrl }: Evid
               alt="Driver Camera Evidence"
               className="w-full border border-gray-300"
               onError={(e) => {
-                e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23f3f4f6" width="400" height="300"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" fill="%236b7280" font-size="14"%3EImage not available%3C/text%3E%3C/svg%3E';
+                e.currentTarget.src =
+                  'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23f3f4f6" width="400" height="300"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" fill="%236b7280" font-size="14"%3EImage not available%3C/text%3E%3C/svg%3E';
               }}
             />
           </div>
@@ -48,7 +52,8 @@ export default function EvidenceSection({ driverCameraUrl, roadCameraUrl }: Evid
               alt="Road Camera Evidence"
               className="w-full border border-gray-300"
               onError={(e) => {
-                e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23f3f4f6" width="400" height="300"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" fill="%236b7280" font-size="14"%3EImage not available%3C/text%3E%3C/svg%3E';
+                e.currentTarget.src =
+                  'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23f3f4f6" width="400" height="300"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" fill="%236b7280" font-size="14"%3EImage not available%3C/text%3E%3C/svg%3E';
               }}
             />
           </div>

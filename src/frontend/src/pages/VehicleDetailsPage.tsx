@@ -1,18 +1,25 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearch } from '@tanstack/react-router';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Car, User, Phone, AlertTriangle } from 'lucide-react';
-import { fetchViolations, type NodeViolation } from '@/lib/api';
-import { normalizeImageUrl } from '@/lib/violations/images';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { type NodeViolation, fetchViolations } from "@/lib/api";
+import { normalizeImageUrl } from "@/lib/violations/images";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { AlertTriangle, ArrowLeft, Car, Phone, User } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export default function VehicleDetailsPage() {
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { vehicleNo?: string };
   const vehicleNo = search.vehicleNo;
-  
+
   const [violations, setViolations] = useState<NodeViolation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,17 +28,17 @@ export default function VehicleDetailsPage() {
     const loadData = async () => {
       try {
         const data = await fetchViolations();
-        const filtered = vehicleNo 
-          ? data.filter(v => v.vehicleNo === vehicleNo)
+        const filtered = vehicleNo
+          ? data.filter((v) => v.vehicleNo === vehicleNo)
           : data;
         setViolations(filtered);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load data');
+        setError(err instanceof Error ? err.message : "Failed to load data");
       } finally {
         setLoading(false);
       }
     };
-    
+
     loadData();
   }, [vehicleNo]);
 
@@ -41,7 +48,10 @@ export default function VehicleDetailsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <Button variant="outline" onClick={() => navigate({ to: '/violations' })}>
+        <Button
+          variant="outline"
+          onClick={() => navigate({ to: "/violations" })}
+        >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Violations
         </Button>
@@ -53,14 +63,17 @@ export default function VehicleDetailsPage() {
   if (error || !vehicleInfo) {
     return (
       <div className="space-y-6">
-        <Button variant="outline" onClick={() => navigate({ to: '/violations' })}>
+        <Button
+          variant="outline"
+          onClick={() => navigate({ to: "/violations" })}
+        >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Violations
         </Button>
         <Card>
           <CardContent className="pt-6">
             <p className="text-center text-gray-600">
-              {error || 'No vehicle data available'}
+              {error || "No vehicle data available"}
             </p>
           </CardContent>
         </Card>
@@ -70,14 +83,18 @@ export default function VehicleDetailsPage() {
 
   return (
     <div className="space-y-6">
-      <Button variant="outline" onClick={() => navigate({ to: '/violations' })}>
+      <Button variant="outline" onClick={() => navigate({ to: "/violations" })}>
         <ArrowLeft className="w-4 h-4 mr-2" />
         Back to Violations
       </Button>
 
       <div className="border-l-4 border-gov-blue pl-6">
-        <h1 className="text-3xl font-bold text-gov-blue mb-2">Vehicle Details</h1>
-        <p className="text-gray-700">Complete violation history and owner information</p>
+        <h1 className="text-3xl font-bold text-gov-blue mb-2">
+          Vehicle Details
+        </h1>
+        <p className="text-gray-700">
+          Complete violation history and owner information
+        </p>
       </div>
 
       <Card>
@@ -90,8 +107,12 @@ export default function VehicleDetailsPage() {
         <CardContent>
           <div className="grid md:grid-cols-3 gap-6">
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Vehicle Number</p>
-              <p className="text-2xl font-bold text-gov-blue">{vehicleInfo.vehicleNo}</p>
+              <p className="text-sm text-muted-foreground mb-1">
+                Vehicle Number
+              </p>
+              <p className="text-2xl font-bold text-gov-blue">
+                {vehicleInfo.vehicleNo}
+              </p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground mb-1 flex items-center gap-1">
@@ -118,7 +139,10 @@ export default function VehicleDetailsPage() {
               <AlertTriangle className="w-6 h-6 text-destructive" />
               Violation History
             </span>
-            <Badge variant={totalScore >= 5 ? 'destructive' : 'default'} className="text-lg px-4 py-1">
+            <Badge
+              variant={totalScore >= 5 ? "destructive" : "default"}
+              className="text-lg px-4 py-1"
+            >
               Total Score: {totalScore}
             </Badge>
           </CardTitle>
@@ -134,14 +158,22 @@ export default function VehicleDetailsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {violations.map((violation, index) => {
+              {violations.map((violation) => {
                 const imageUrl = normalizeImageUrl(violation.imageUrl);
                 return (
-                  <TableRow key={index}>
-                    <TableCell>{new Date(violation.timestamp).toLocaleString()}</TableCell>
-                    <TableCell className="font-medium">{violation.violationType}</TableCell>
+                  <TableRow
+                    key={`${violation.vehicleNo}-${violation.timestamp}-${violation.violationType}`}
+                  >
                     <TableCell>
-                      <span className="font-semibold text-destructive">{violation.score}</span>
+                      {new Date(violation.timestamp).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {violation.violationType}
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-semibold text-destructive">
+                        {violation.score}
+                      </span>
                     </TableCell>
                     <TableCell>
                       {imageUrl ? (
@@ -149,9 +181,13 @@ export default function VehicleDetailsPage() {
                           src={imageUrl}
                           alt="Proof"
                           className="w-16 h-12 object-cover rounded border cursor-pointer hover:opacity-80"
-                          onClick={() => window.open(imageUrl, '_blank')}
+                          onClick={() => window.open(imageUrl, "_blank")}
+                          onKeyDown={(e) =>
+                            e.key === "Enter" && window.open(imageUrl, "_blank")
+                          }
                           onError={(e) => {
-                            e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="64" height="48"%3E%3Crect fill="%23f3f4f6" width="64" height="48"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%239ca3af" font-size="10"%3EN/A%3C/text%3E%3C/svg%3E';
+                            e.currentTarget.src =
+                              'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="64" height="48"%3E%3Crect fill="%23f3f4f6" width="64" height="48"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%239ca3af" font-size="10"%3EN/A%3C/text%3E%3C/svg%3E';
                           }}
                         />
                       ) : (

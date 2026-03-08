@@ -1,34 +1,74 @@
-import { Link, useRouterState } from '@tanstack/react-router';
+import { Link, useRouterState } from "@tanstack/react-router";
+import { AlertOctagon, Car, FileText, LayoutDashboard } from "lucide-react";
 
 export default function PortalNav() {
   const router = useRouterState();
   const currentPath = router.location.pathname;
 
   const navItems = [
-    { path: '/', label: 'Dashboard' },
-    { path: '/violations', label: 'Live Violations' },
-    { path: '/vehicle-details', label: 'Vehicle Details' },
-    { path: '/challan-preview', label: 'Challan Preview' },
+    {
+      path: "/",
+      label: "Dashboard",
+      icon: LayoutDashboard,
+      ocid: "nav.dashboard.link",
+    },
+    {
+      path: "/violations",
+      label: "Live Violations",
+      icon: AlertOctagon,
+      ocid: "nav.violations.link",
+    },
+    {
+      path: "/vehicle-details",
+      label: "Vehicle Details",
+      icon: Car,
+      ocid: "nav.vehicle_details.link",
+    },
+    {
+      path: "/challan-preview",
+      label: "Challan Preview",
+      icon: FileText,
+      ocid: "nav.challan_preview.link",
+    },
   ];
 
   return (
-    <nav className="bg-gov-blue-dark">
+    <nav
+      className="border-t"
+      style={{
+        backgroundColor: "#082d6b",
+        borderColor: "rgba(255,255,255,0.12)",
+      }}
+      aria-label="Main navigation"
+    >
       <div className="container mx-auto px-4">
-        <ul className="flex flex-wrap gap-1">
-          {navItems.map((item) => (
-            <li key={item.path}>
-              <Link
-                to={item.path}
-                className={`block px-6 py-3 text-sm font-medium transition-colors ${
-                  currentPath === item.path
-                    ? 'bg-white text-gov-blue'
-                    : 'text-white hover:bg-gov-blue-hover'
-                }`}
-              >
-                {item.label}
-              </Link>
-            </li>
-          ))}
+        <ul className="flex flex-wrap">
+          {navItems.map((item) => {
+            const isActive = currentPath === item.path;
+            const Icon = item.icon;
+            return (
+              <li key={item.path}>
+                <Link
+                  to={item.path}
+                  data-ocid={item.ocid}
+                  className={`flex items-center gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-wider transition-all duration-150 border-b-2 ${
+                    isActive
+                      ? "border-white text-white"
+                      : "border-transparent hover:border-white/40 hover:text-white"
+                  }`}
+                  style={{
+                    color: isActive ? "#ffffff" : "#93c5fd",
+                    backgroundColor: isActive
+                      ? "rgba(255,255,255,0.08)"
+                      : "transparent",
+                  }}
+                >
+                  <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>{item.label}</span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </nav>

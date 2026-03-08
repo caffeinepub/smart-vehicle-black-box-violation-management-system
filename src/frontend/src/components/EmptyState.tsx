@@ -1,4 +1,4 @@
-import { FileX } from 'lucide-react';
+import { FileX } from "lucide-react";
 
 interface EmptyStateProps {
   message: string;

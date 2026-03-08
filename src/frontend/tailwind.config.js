@@ -14,6 +14,10 @@ export default {
             }
         },
         extend: {
+            fontFamily: {
+                sans: ['"Plus Jakarta Sans"', '"Segoe UI"', 'system-ui', 'sans-serif'],
+                mono: ['"Geist Mono"', '"Courier New"', 'monospace'],
+            },
             colors: {
                 border: 'oklch(var(--border))',
                 input: 'oklch(var(--input))',
@@ -54,7 +58,12 @@ export default {
                     3: 'oklch(var(--chart-3))',
                     4: 'oklch(var(--chart-4))',
                     5: 'oklch(var(--chart-5))'
-                }
+                },
+                'gov-blue': '#0B3D91',
+                'gov-blue-dark': '#082d6b',
+                'gov-blue-light': '#1a4fa8',
+                'saffron': '#FF9933',
+                'india-green': '#138808',
             },
             borderRadius: {
                 lg: 'var(--radius)',
