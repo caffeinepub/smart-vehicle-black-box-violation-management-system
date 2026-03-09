@@ -5,9 +5,12 @@ interface NodeViolation {
   ownerName: string;
   mobile: string;
   violationType: string;
-  timestamp: string;
+  timestamp: string | number;
   score: number;
+  fineAmount?: number;
   imageUrl?: string;
+  lat?: number;
+  lng?: number;
 }
 
 export type { NodeViolation };
@@ -16,7 +19,7 @@ export function getViolationId(v: NodeViolation): string {
   return v._id || v.id || "";
 }
 
-const API_BASE = "https://vehicle-blackbox-system.onrender.com";
+const API_BASE = "https://vehicle-blackbox-system-1.onrender.com";
 
 export async function fetchViolations(): Promise<NodeViolation[]> {
   try {

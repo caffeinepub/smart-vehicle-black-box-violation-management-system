@@ -1,54 +1,39 @@
-# Smart Vehicle Black Box & Violation Management System
+# SAFEWAY Vehicle Blackbox Dashboard
 
 ## Current State
-
-A React + TypeScript frontend with:
-- `PortalLayout` with India tricolor strip, dark blue government header with SAFEWAY logo, nav, and footer
-- `PortalNav` with 4 nav items: Dashboard, Live Violations, Vehicle Details, Challan Preview
-- `DashboardPage` with 4 stat cards (no auto-refresh), navigation cards grid, and system info panel
-- `LiveViolationsPage` with 3-second auto-poll of `GET /log`, latest violation card, violations table (8 columns), popup notifications, score-based banner, Download/Pay buttons
-- `ChallanPreviewModal` for challan detail popup with PDF download
-- `ChallanPreviewPage` standalone challan page
-- `VehicleDetailsPage` and `ChallanManagementPage` exist as separate pages
-- `PopupNotifications` with slide-in toast alerts (top-right)
-- `LatestViolationCard` shows most recent violation with image
-- Tailwind config with `gov-blue` custom color tokens; Plus Jakarta Sans font
+A React+TypeScript dashboard with pages: Dashboard, Live Violations, Vehicle Details, Challan Preview, Challan Management, Alerts, Analytics. Fetches from `https://vehicle-blackbox-system-1.onrender.com/log` every 3 seconds. Has violation table, stat cards, popup notifications, challan modal, payment modal.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Full professional redesign of all UI to look like an official government traffic monitoring control system
-- Score status logic: Score 1 → Green badge, Score 3 → Orange badge, Score 5 → Red badge (previously was score-based ranges, not exact score values per spec)
-- Alert sound when new violation popup appears (using Web Audio API beep)
-- Dashboard stat cards: must have larger numbers, icons, colored left-border indicator, shadow, rounded corners, and update every 3 seconds (add interval on DashboardPage)
-- `DashboardPage` auto-refresh every 3 seconds to keep stat cards live
-- Multiple violation warning banner on DashboardPage too (total score ≥ 5)
-- Enhanced visual hierarchy: stronger typography, more spacious layout, section headers with icons
-- Challan download button in table: open `/challans/<filename>` from backend; fallback to challan modal
-- PortalLayout header: increase visual weight, add India gov emblem area, stronger SAFEWAY logo placement with surrounding frame/badge
-- Popup alert redesign: show "Traffic Violation Detected" as header with Vehicle Number, Violation Type, Time details
-- Mobile responsive improvements throughout
+- Real-time fetch every 2 seconds (change from 3s)
+- Browser Notification API (not DOM alert) for score >= 5 within last 12 hours
+- Score mapping: Seatbelt=1, Door Open=1, Harsh Braking=3, Alcohol Low=3, Alcohol High=5, Drowsy Driving=5, Harsh Driving=5
+- Vehicle Monitoring section with two camera streams (INSIDE CAMERA: http://ESP_INSIDE_IP:81/stream, FRONT CAMERA: http://ESP_FRONT_IP:81/stream) side-by-side with error fallback "Camera unavailable."
+- Emergency Events section showing only Accident and Collision events as cards with: Vehicle Number, Event Type, Date/Time, Location (clickable link to Google Maps)
+- Driver Risk Level card: score < 3 = LOW (green), 3-4 = MEDIUM (orange), >= 5 = HIGH (red)
+- System Status card: ESP Connection: ACTIVE, Vehicle Status: ONLINE, Last Event Time (auto-updates)
+- Owner Name column added to violation table
 
 ### Modify
-- `PortalLayout`: increase header height and visual authority; add India gov branding strip/seal area
-- `PortalNav`: add icons to nav items for better visual identification
-- `DashboardPage`: add 3-second interval refresh; improve card design with larger numbers and colored indicators; add multiple violations banner
-- `LiveViolationsPage`: update status badge logic (score 1=green, 3=orange, 5=red); improve table row styling; improve alert banner prominence
-- `PopupNotifications`: show Vehicle Number, Violation Type, Time in the popup body; play beep sound on new alert notifications
-- `LatestViolationCard`: improve visual design with stronger government aesthetic
-- `ChallanPreviewModal`: add challan file download link to `/challans/<filename>` when available
+- Violation table columns: Vehicle Number, Owner Name, Violation Type, Score, Fine Amount, Date and Time, Violation Image
+- Fetch interval: 2 seconds instead of 3
+- Multiple violation notification: use browser Notification API, calculate 12-hour window
+- Dashboard layout order: Vehicle Monitoring → Driver Risk Level → Violation Table → Emergency Events
 
 ### Remove
-- Nothing to remove structurally; only visual/behavioral improvements
+- Dashboard alert box/banner for multiple violations (replaced by browser notification only)
 
 ## Implementation Plan
-
-1. **Update `PortalLayout.tsx`**: Taller header with more visual authority, stronger India gov context, improved nav with icons
-2. **Update `PortalNav.tsx`**: Add Lucide icons to each nav item
-3. **Update `DashboardPage.tsx`**: Add 3-second auto-refresh via `useInterval`; bigger stat cards with rounded corners, shadow, large number display; multiple violations banner; improved section visual hierarchy
-4. **Update `LiveViolationsPage.tsx`**: Fix status badge to score 1=green, 3=orange, 5=red; improve table styling; improve banner
-5. **Update `PopupNotifications.tsx`**: Redesign popup to show Vehicle/Type/Time details; add Web Audio beep on alert type notifications
-6. **Update `LatestViolationCard.tsx`**: Stronger government-style card with better visual hierarchy
-7. **Update `ChallanPreviewModal.tsx`**: Add challan file download link support
-8. **Update `tailwind.config.js`**: Add `rounded-xl` usage; ensure `gov-blue` colors are well-defined
-9. Validate and fix any TypeScript/lint errors
+1. Update `api.ts` to change interval note
+2. Update `DashboardPage.tsx`:
+   - Change fetch to 2s
+   - Add browser Notification API permission request + trigger
+   - Add 12-hour window scoring logic with score mapping
+   - Add Vehicle Monitoring section (2 camera streams, error fallback)
+   - Add Emergency Events section (filter accident/collision, location link)
+   - Add Driver Risk Level card
+   - Add System Status card
+   - Add Owner Name to violation table
+   - Reorder sections: Vehicle Monitoring → Driver Risk Level → Violation Table → Emergency Events
+   - Remove dashboard score alert banner (browser notification only)

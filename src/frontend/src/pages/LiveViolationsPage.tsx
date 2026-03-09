@@ -1,6 +1,7 @@
 import ChallanPreviewModal from "@/components/ChallanPreviewModal";
 import EmptyState from "@/components/EmptyState";
 import LatestViolationCard from "@/components/LatestViolationCard";
+import PaymentModal from "@/components/PaymentModal";
 import { showNotification } from "@/components/notifications/PopupNotifications";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,12 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useInterval } from "@/hooks/useInterval";
-import {
-  type NodeViolation,
-  fetchViolations,
-  getViolationId,
-  payViolation,
-} from "@/lib/api";
+import { type NodeViolation, fetchViolations } from "@/lib/api";
 import { normalizeImageUrl } from "@/lib/violations/images";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -27,29 +23,68 @@ import {
   CheckCircle2,
   CreditCard,
   Download,
-  Loader2,
   RefreshCw,
   Siren,
+  X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 
-function formatDateTime(timestamp: string): string {
-  try {
-    return new Date(timestamp).toLocaleString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  } catch {
-    return timestamp;
+const FINE_AMOUNTS: Record<string, number> = {
+  Overspeeding: 2000,
+  "No Helmet": 1000,
+  "Red Light Violation": 1000,
+  "Wrong Side Driving": 5000,
+  "No Seatbelt": 1000,
+  "Mobile Usage": 1000,
+  "Drunk Driving": 10000,
+};
+
+function formatDateTime(timestamp: string | number): string {
+  if (!timestamp) return "—";
+  let d = new Date(timestamp as string);
+  if (Number.isNaN(d.getTime()) && typeof timestamp === "string") {
+    const asNum = Number(timestamp);
+    if (!Number.isNaN(asNum)) d = new Date(asNum);
   }
+  if (Number.isNaN(d.getTime())) return String(timestamp);
+  const day = d.getDate().toString().padStart(2, "0");
+  const month = d.toLocaleString("en-IN", { month: "short" });
+  const year = d.getFullYear();
+  const time = d.toLocaleString("en-IN", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${day} ${month} ${year}, ${time}`;
 }
 
-function getStatusBadge(score: number, isPaid: boolean): React.ReactNode {
+/** Build a map of vehicleNo → total score across all violations */
+function buildVehicleScoreMap(
+  violations: NodeViolation[],
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const v of violations) {
+    map.set(v.vehicleNo, (map.get(v.vehicleNo) ?? 0) + v.score);
+  }
+  return map;
+}
+
+function getVehicleTotalFine(
+  vehicleNo: string,
+  violations: NodeViolation[],
+): number {
+  return violations
+    .filter((v) => v.vehicleNo === vehicleNo)
+    .reduce(
+      (sum, v) => sum + (v.fineAmount ?? FINE_AMOUNTS[v.violationType] ?? 1000),
+      0,
+    );
+}
+
+function getStatusBadge(
+  vehicleScore: number,
+  isPaid: boolean,
+): React.ReactNode {
   if (isPaid) {
     return (
       <Badge
@@ -66,7 +101,7 @@ function getStatusBadge(score: number, isPaid: boolean): React.ReactNode {
       </Badge>
     );
   }
-  if (score >= 5) {
+  if (vehicleScore >= 5) {
     return (
       <Badge
         className="font-semibold"
@@ -77,26 +112,11 @@ function getStatusBadge(score: number, isPaid: boolean): React.ReactNode {
           borderRadius: "3px",
         }}
       >
-        Critical
+        Severe Violation
       </Badge>
     );
   }
-  if (score >= 4) {
-    return (
-      <Badge
-        className="font-semibold"
-        style={{
-          backgroundColor: "#ffedd5",
-          color: "#9a3412",
-          border: "1px solid #fed7aa",
-          borderRadius: "3px",
-        }}
-      >
-        Severe
-      </Badge>
-    );
-  }
-  if (score >= 3) {
+  if (vehicleScore >= 3) {
     return (
       <Badge
         className="font-semibold"
@@ -107,22 +127,7 @@ function getStatusBadge(score: number, isPaid: boolean): React.ReactNode {
           borderRadius: "3px",
         }}
       >
-        High
-      </Badge>
-    );
-  }
-  if (score >= 2) {
-    return (
-      <Badge
-        className="font-semibold"
-        style={{
-          backgroundColor: "#fef9c3",
-          color: "#854d0e",
-          border: "1px solid #fde047",
-          borderRadius: "3px",
-        }}
-      >
-        Moderate
+        Warning
       </Badge>
     );
   }
@@ -136,7 +141,7 @@ function getStatusBadge(score: number, isPaid: boolean): React.ReactNode {
         borderRadius: "3px",
       }}
     >
-      Low Risk
+      Low Risk Violation
     </Badge>
   );
 }
@@ -147,11 +152,19 @@ export default function LiveViolationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [selectedViolation, setSelectedViolation] =
-    useState<NodeViolation | null>(null);
+
+  // Challan modal state
   const [challanModalOpen, setChallanModalOpen] = useState(false);
-  const [paidIds, setPaidIds] = useState<Set<string>>(new Set());
-  const [payingIds, setPayingIds] = useState<Set<string>>(new Set());
+  const [challanVehicleNo, setChallanVehicleNo] = useState<string>("");
+
+  // Payment modal state
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentVehicleNo, setPaymentVehicleNo] = useState<string>("");
+
+  // Paid vehicles set
+  const [paidVehicles, setPaidVehicles] = useState<Set<string>>(new Set());
+
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const previousViolationsRef = useRef<Set<string>>(new Set());
   const previousTotalScoreRef = useRef<number>(0);
@@ -161,29 +174,27 @@ export default function LiveViolationsPage() {
       setError(null);
       const data = await fetchViolations();
 
-      // Detect new violations by vehicleNo+timestamp key
       const newViolations = data.filter((v) => {
         const key = `${v.vehicleNo}-${v.timestamp}`;
         return !previousViolationsRef.current.has(key);
       });
 
-      // Show notification for each new violation (only after initial load)
       if (newViolations.length > 0 && previousViolationsRef.current.size > 0) {
         for (const v of newViolations) {
           showNotification(
             "Traffic Violation Detected",
             "alert",
-            `Detected at ${new Date(v.timestamp).toLocaleTimeString("en-IN")}`,
+            `Detected at ${formatDateTime(v.timestamp)}`,
             v.vehicleNo,
             v.violationType,
+            v.score,
+            v.fineAmount,
           );
         }
       }
 
-      // Calculate total score
       const totalScore = data.reduce((sum, v) => sum + v.score, 0);
 
-      // Show RTO notification if score threshold crossed
       if (
         totalScore >= 5 &&
         previousTotalScoreRef.current < 5 &&
@@ -196,7 +207,6 @@ export default function LiveViolationsPage() {
         );
       }
 
-      // Update refs
       const currentViolationKeys = new Set(
         data.map((v) => `${v.vehicleNo}-${v.timestamp}`),
       );
@@ -214,7 +224,7 @@ export default function LiveViolationsPage() {
     }
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: loadViolations is stable (defined in component scope, refs used internally)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadViolations is stable
   useEffect(() => {
     loadViolations();
   }, []);
@@ -223,52 +233,44 @@ export default function LiveViolationsPage() {
     loadViolations();
   }, 3000);
 
-  const totalScore = violations.reduce((sum, v) => sum + v.score, 0);
+  const vehicleScoreMap = buildVehicleScoreMap(violations);
+  const globalTotalScore = violations.reduce((sum, v) => sum + v.score, 0);
+
   const latestViolation =
     violations.length > 0
       ? violations.reduce((latest, current) =>
-          new Date(current.timestamp) > new Date(latest.timestamp)
+          new Date(current.timestamp as string).getTime() >
+          new Date(latest.timestamp as string).getTime()
             ? current
             : latest,
         )
       : null;
 
-  const handleViewChallan = (violation: NodeViolation) => {
-    setSelectedViolation(violation);
+  const handleViewChallan = (vehicleNo: string) => {
+    setChallanVehicleNo(vehicleNo);
     setChallanModalOpen(true);
+  };
+
+  const handleOpenPayment = (vehicleNo: string) => {
+    setPaymentVehicleNo(vehicleNo);
+    setPaymentModalOpen(true);
+  };
+
+  const handlePaymentSuccess = (vehicleNo: string) => {
+    setPaidVehicles((prev) => new Set(prev).add(vehicleNo));
   };
 
   const handleViewVehicle = (vehicleNo: string) => {
     navigate({ to: "/vehicle-details", search: { vehicleNo } });
   };
 
-  const handlePay = async (violation: NodeViolation, _rowIndex: number) => {
-    const id = getViolationId(violation);
-    if (!id) {
-      toast.error("Payment failed: Violation ID not found");
-      return;
-    }
-
-    setPayingIds((prev) => new Set(prev).add(id));
-    try {
-      await payViolation(id);
-      setPaidIds((prev) => new Set(prev).add(id));
-      toast.success("Challan Paid Successfully", {
-        description: `Challan for ${violation.vehicleNo} has been paid`,
-      });
-    } catch (err) {
-      toast.error("Payment failed", {
-        description:
-          err instanceof Error ? err.message : "Please try again later",
-      });
-    } finally {
-      setPayingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
-  };
+  // Get total fine for the selected challan vehicle
+  const challanVehicleFine = challanVehicleNo
+    ? getVehicleTotalFine(challanVehicleNo, violations)
+    : 0;
+  const challanVehicleScore = challanVehicleNo
+    ? (vehicleScoreMap.get(challanVehicleNo) ?? 0)
+    : 0;
 
   if (loading) {
     return (
@@ -370,8 +372,8 @@ export default function LiveViolationsPage() {
         </div>
       )}
 
-      {/* Score ≥ 5 Critical Alert */}
-      {totalScore >= 5 && (
+      {/* Score ≥ 5 Critical Alert (global) */}
+      {globalTotalScore >= 5 && (
         <div
           data-ocid="violations.score_alert.panel"
           className="flex items-start gap-4 px-5 py-4 rounded-lg shadow-lg"
@@ -389,12 +391,13 @@ export default function LiveViolationsPage() {
           />
           <div className="flex-1">
             <p className="font-extrabold text-white text-base leading-tight tracking-wide">
-              ⚠ Multiple Violations Detected — Data Forwarded to Authorities
+              ⚠ Multiple violations detected. Data forwarded to authorities.
             </p>
-            <p className="text-sm mt-1" style={{ color: "#fca5a5" }}>
-              Total violation score:{" "}
-              <strong className="text-white">{totalScore} pts</strong> — Data
-              has been forwarded to RTO and challan auto-generated.
+            <p
+              className="text-sm font-semibold mt-1"
+              style={{ color: "#fca5a5" }}
+            >
+              Challan Generated
             </p>
           </div>
           <AlertTriangle
@@ -414,7 +417,7 @@ export default function LiveViolationsPage() {
           {latestViolation && (
             <LatestViolationCard
               violation={latestViolation}
-              onViewChallan={() => handleViewChallan(latestViolation)}
+              onViewChallan={() => handleViewChallan(latestViolation.vehicleNo)}
               onViewVehicle={() => handleViewVehicle(latestViolation.vehicleNo)}
             />
           )}
@@ -444,62 +447,33 @@ export default function LiveViolationsPage() {
                     className="hover:bg-transparent border-b border-gray-200"
                     style={{ backgroundColor: "#eef2f9" }}
                   >
-                    <TableHead
-                      className="font-bold text-xs uppercase tracking-wider py-3 whitespace-nowrap"
-                      style={{ color: "#1e3a6e" }}
-                    >
-                      Vehicle Number
-                    </TableHead>
-                    <TableHead
-                      className="font-bold text-xs uppercase tracking-wider py-3 whitespace-nowrap"
-                      style={{ color: "#1e3a6e" }}
-                    >
-                      Owner Name
-                    </TableHead>
-                    <TableHead
-                      className="font-bold text-xs uppercase tracking-wider py-3 whitespace-nowrap"
-                      style={{ color: "#1e3a6e" }}
-                    >
-                      Violation Type
-                    </TableHead>
-                    <TableHead
-                      className="font-bold text-xs uppercase tracking-wider py-3 whitespace-nowrap"
-                      style={{ color: "#1e3a6e" }}
-                    >
-                      Score
-                    </TableHead>
-                    <TableHead
-                      className="font-bold text-xs uppercase tracking-wider py-3 whitespace-nowrap"
-                      style={{ color: "#1e3a6e" }}
-                    >
-                      Date &amp; Time
-                    </TableHead>
-                    <TableHead
-                      className="font-bold text-xs uppercase tracking-wider py-3 whitespace-nowrap"
-                      style={{ color: "#1e3a6e" }}
-                    >
-                      Image
-                    </TableHead>
-                    <TableHead
-                      className="font-bold text-xs uppercase tracking-wider py-3 whitespace-nowrap"
-                      style={{ color: "#1e3a6e" }}
-                    >
-                      Status
-                    </TableHead>
-                    <TableHead
-                      className="font-bold text-xs uppercase tracking-wider py-3 whitespace-nowrap"
-                      style={{ color: "#1e3a6e" }}
-                    >
-                      Actions
-                    </TableHead>
+                    {[
+                      "Vehicle Number",
+                      "Violation Type",
+                      "Score",
+                      "Fine Amount",
+                      "Time",
+                      "Evidence Image",
+                      "Status",
+                      "Action",
+                    ].map((col) => (
+                      <TableHead
+                        key={col}
+                        className="font-bold text-xs uppercase tracking-wider py-3 whitespace-nowrap"
+                        style={{ color: "#1e3a6e" }}
+                      >
+                        {col}
+                      </TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {violations.map((violation, index) => {
                     const imageUrl = normalizeImageUrl(violation.imageUrl);
-                    const vid = getViolationId(violation);
-                    const isPaid = vid ? paidIds.has(vid) : false;
-                    const isPaying = vid ? payingIds.has(vid) : false;
+                    const vehicleScore =
+                      vehicleScoreMap.get(violation.vehicleNo) ?? 0;
+                    const isPaidVehicle = paidVehicles.has(violation.vehicleNo);
+                    const showChallanActions = vehicleScore >= 5;
                     const rowNum = index + 1;
 
                     return (
@@ -531,13 +505,6 @@ export default function LiveViolationsPage() {
                           {violation.vehicleNo}
                         </TableCell>
 
-                        {/* Owner Name */}
-                        <TableCell className="text-gray-800 text-sm py-3 font-medium">
-                          {violation.ownerName || (
-                            <span className="text-gray-400 italic">N/A</span>
-                          )}
-                        </TableCell>
-
                         {/* Violation Type */}
                         <TableCell className="text-gray-800 text-sm py-3">
                           <span className="font-semibold">
@@ -545,7 +512,7 @@ export default function LiveViolationsPage() {
                           </span>
                         </TableCell>
 
-                        {/* Score */}
+                        {/* Score (per violation) */}
                         <TableCell className="py-3">
                           <span
                             className="font-black text-sm px-2.5 py-1 rounded-full"
@@ -555,46 +522,47 @@ export default function LiveViolationsPage() {
                                   ? "#fee2e2"
                                   : violation.score >= 3
                                     ? "#fff7ed"
-                                    : violation.score >= 2
-                                      ? "#fef9c3"
-                                      : "#dcfce7",
+                                    : "#dcfce7",
                               color:
                                 violation.score >= 5
                                   ? "#991b1b"
                                   : violation.score >= 3
                                     ? "#c2410c"
-                                    : violation.score >= 2
-                                      ? "#854d0e"
-                                      : "#166534",
+                                    : "#166534",
                             }}
                           >
                             {violation.score}
                           </span>
                         </TableCell>
 
-                        {/* Date & Time */}
+                        {/* Fine Amount */}
+                        <TableCell
+                          className="py-3 font-semibold text-sm"
+                          style={{ color: "#dc2626" }}
+                        >
+                          {violation.fineAmount != null
+                            ? `₹${violation.fineAmount}`
+                            : `₹${FINE_AMOUNTS[violation.violationType] ?? 1000}`}
+                        </TableCell>
+
+                        {/* Time */}
                         <TableCell className="text-gray-600 text-sm py-3 whitespace-nowrap font-mono text-xs">
                           {formatDateTime(violation.timestamp)}
                         </TableCell>
 
-                        {/* Image */}
+                        {/* Evidence Image */}
                         <TableCell className="py-3">
                           {imageUrl ? (
                             <button
                               type="button"
-                              onClick={() => window.open(imageUrl, "_blank")}
+                              onClick={() => setLightboxUrl(imageUrl)}
                               className="block focus:outline-none focus:ring-2 rounded"
-                              style={
-                                {
-                                  focusRingColor: "#0B3D91",
-                                } as React.CSSProperties
-                              }
-                              aria-label="View violation proof image"
+                              aria-label="View violation proof image fullscreen"
                             >
                               <img
                                 src={imageUrl}
-                                alt="Proof"
-                                className="w-16 h-12 object-cover border-2 border-gray-200 hover:opacity-80 hover:border-blue-400 transition-all"
+                                alt="Evidence"
+                                className="w-16 h-12 object-cover border-2 border-gray-200 hover:opacity-80 hover:border-blue-400 transition-all cursor-zoom-in"
                                 style={{ borderRadius: "3px" }}
                                 onError={(e) => {
                                   e.currentTarget.src =
@@ -609,79 +577,104 @@ export default function LiveViolationsPage() {
                           )}
                         </TableCell>
 
-                        {/* Status */}
+                        {/* Status — based on vehicle total score */}
                         <TableCell className="py-3">
-                          {getStatusBadge(violation.score, isPaid)}
+                          {getStatusBadge(vehicleScore, isPaidVehicle)}
                         </TableCell>
 
-                        {/* Actions */}
+                        {/* Action — based on vehicle total score */}
                         <TableCell className="py-3">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {/* Download Challan */}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              data-ocid={`violations.download_challan_button.${rowNum}`}
-                              onClick={() => handleViewChallan(violation)}
-                              className="text-xs h-7 px-2 whitespace-nowrap transition-colors"
-                              style={{
-                                borderColor: "#0B3D91",
-                                color: "#0B3D91",
-                                borderRadius: "3px",
-                              }}
-                              onMouseEnter={(e) => {
-                                (
-                                  e.currentTarget as HTMLButtonElement
-                                ).style.backgroundColor = "#0B3D91";
-                                (
-                                  e.currentTarget as HTMLButtonElement
-                                ).style.color = "#ffffff";
-                              }}
-                              onMouseLeave={(e) => {
-                                (
-                                  e.currentTarget as HTMLButtonElement
-                                ).style.backgroundColor = "transparent";
-                                (
-                                  e.currentTarget as HTMLButtonElement
-                                ).style.color = "#0B3D91";
-                              }}
-                            >
-                              <Download className="w-3 h-3 mr-1" />
-                              Download Challan
-                            </Button>
-
-                            {/* Pay Challan */}
-                            <Button
-                              size="sm"
-                              data-ocid={`violations.pay_challan_button.${rowNum}`}
-                              onClick={() => handlePay(violation, index)}
-                              disabled={isPaid || isPaying}
-                              className="text-xs h-7 px-2 whitespace-nowrap transition-colors"
-                              style={{
-                                backgroundColor: isPaid ? "#15803d" : "#047857",
-                                color: "#ffffff",
-                                borderRadius: "3px",
-                                opacity: isPaid ? 0.85 : 1,
-                              }}
-                            >
-                              {isPaying ? (
-                                <>
-                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                  Processing...
-                                </>
-                              ) : isPaid ? (
-                                <>
-                                  <CheckCircle2 className="w-3 h-3 mr-1" />
-                                  Paid
-                                </>
-                              ) : (
-                                <>
-                                  <CreditCard className="w-3 h-3 mr-1" />
-                                  Pay Challan
-                                </>
+                          {showChallanActions ? (
+                            <div className="flex flex-col gap-1.5">
+                              {!isPaidVehicle && (
+                                <div>
+                                  <p
+                                    className="text-xs font-semibold leading-tight"
+                                    style={{ color: "#b91c1c" }}
+                                  >
+                                    Multiple violations detected. Data forwarded
+                                    to authorities.
+                                  </p>
+                                  <p
+                                    className="text-xs font-medium mt-0.5 mb-1.5"
+                                    style={{ color: "#dc2626" }}
+                                  >
+                                    Challan Generated
+                                  </p>
+                                </div>
                               )}
-                            </Button>
-                          </div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  data-ocid={`violations.download_challan_button.${rowNum}`}
+                                  onClick={() =>
+                                    handleViewChallan(violation.vehicleNo)
+                                  }
+                                  className="text-xs h-7 px-2 whitespace-nowrap transition-colors"
+                                  style={{
+                                    borderColor: "#0B3D91",
+                                    color: "#0B3D91",
+                                    borderRadius: "3px",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    (
+                                      e.currentTarget as HTMLButtonElement
+                                    ).style.backgroundColor = "#0B3D91";
+                                    (
+                                      e.currentTarget as HTMLButtonElement
+                                    ).style.color = "#ffffff";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    (
+                                      e.currentTarget as HTMLButtonElement
+                                    ).style.backgroundColor = "transparent";
+                                    (
+                                      e.currentTarget as HTMLButtonElement
+                                    ).style.color = "#0B3D91";
+                                  }}
+                                >
+                                  <Download className="w-3 h-3 mr-1" />
+                                  Download Challan
+                                </Button>
+
+                                {isPaidVehicle ? (
+                                  <span
+                                    className="text-xs font-bold px-2 py-1 rounded"
+                                    style={{
+                                      backgroundColor: "#dcfce7",
+                                      color: "#166534",
+                                      border: "1px solid #86efac",
+                                    }}
+                                  >
+                                    <CheckCircle2 className="w-3 h-3 inline mr-1" />
+                                    Paid ✓
+                                  </span>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    data-ocid={`violations.pay_challan_button.${rowNum}`}
+                                    onClick={() =>
+                                      handleOpenPayment(violation.vehicleNo)
+                                    }
+                                    className="text-xs h-7 px-2 whitespace-nowrap transition-colors"
+                                    style={{
+                                      backgroundColor: "#047857",
+                                      color: "#ffffff",
+                                      borderRadius: "3px",
+                                    }}
+                                  >
+                                    <CreditCard className="w-3 h-3 mr-1" />
+                                    Pay Challan
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">
+                              —
+                            </span>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -697,9 +690,61 @@ export default function LiveViolationsPage() {
       <ChallanPreviewModal
         open={challanModalOpen}
         onOpenChange={setChallanModalOpen}
-        violation={selectedViolation}
+        violations={violations}
+        vehicleNo={challanVehicleNo}
+        totalScore={challanVehicleScore}
+        totalFine={challanVehicleFine}
+        isPaid={paidVehicles.has(challanVehicleNo)}
         data-ocid="violations.challan_modal.dialog"
       />
+
+      {/* Payment Modal */}
+      <PaymentModal
+        open={paymentModalOpen}
+        onOpenChange={setPaymentModalOpen}
+        violations={violations}
+        vehicleNo={paymentVehicleNo}
+        challanId={`SMVB-${Date.now().toString().slice(-8)}`}
+        totalFine={
+          paymentVehicleNo
+            ? getVehicleTotalFine(paymentVehicleNo, violations)
+            : 0
+        }
+        onPaymentSuccess={handlePaymentSuccess}
+      />
+
+      {/* Fullscreen Image Lightbox */}
+      {lightboxUrl && (
+        <div
+          data-ocid="violations.evidence.modal"
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.92)" }}
+          onClick={() => setLightboxUrl(null)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setLightboxUrl(null);
+          }}
+          tabIndex={-1}
+          aria-modal="true"
+          aria-label="Evidence image fullscreen view"
+        >
+          <button
+            type="button"
+            data-ocid="violations.evidence.close_button"
+            onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 text-white rounded-full p-2 transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white"
+            aria-label="Close fullscreen image"
+          >
+            <X className="w-7 h-7" />
+          </button>
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: propagation-stop only */}
+          <img
+            src={lightboxUrl}
+            alt="Evidence fullscreen"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

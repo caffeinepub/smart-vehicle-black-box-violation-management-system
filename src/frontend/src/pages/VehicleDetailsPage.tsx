@@ -15,6 +15,24 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { AlertTriangle, ArrowLeft, Car, Phone, User } from "lucide-react";
 import { useEffect, useState } from "react";
 
+function formatDateTime(timestamp: string | number): string {
+  if (!timestamp) return "—";
+  let d = new Date(timestamp as string);
+  if (Number.isNaN(d.getTime()) && typeof timestamp === "string") {
+    const asNum = Number(timestamp);
+    if (!Number.isNaN(asNum)) d = new Date(asNum);
+  }
+  if (Number.isNaN(d.getTime())) return String(timestamp);
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 export default function VehicleDetailsPage() {
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { vehicleNo?: string };
@@ -164,8 +182,8 @@ export default function VehicleDetailsPage() {
                   <TableRow
                     key={`${violation.vehicleNo}-${violation.timestamp}-${violation.violationType}`}
                   >
-                    <TableCell>
-                      {new Date(violation.timestamp).toLocaleString()}
+                    <TableCell className="text-sm text-gray-600">
+                      {formatDateTime(violation.timestamp)}
                     </TableCell>
                     <TableCell className="font-medium">
                       {violation.violationType}

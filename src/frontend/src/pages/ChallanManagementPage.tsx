@@ -6,6 +6,24 @@ import { useNavigate } from "@tanstack/react-router";
 import { AlertCircle, FileText, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 
+function formatDateTime(timestamp: string | number): string {
+  if (!timestamp) return "—";
+  let d = new Date(timestamp as string);
+  if (Number.isNaN(d.getTime()) && typeof timestamp === "string") {
+    const asNum = Number(timestamp);
+    if (!Number.isNaN(asNum)) d = new Date(asNum);
+  }
+  if (Number.isNaN(d.getTime())) return String(timestamp);
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 export default function ChallanManagementPage() {
   const navigate = useNavigate();
   const [violations, setViolations] = useState<NodeViolation[]>([]);
@@ -139,9 +157,29 @@ export default function ChallanManagementPage() {
                         <p className="text-3xl font-bold text-destructive">
                           ₹{totalFine.toLocaleString()}
                         </p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Score: {totalScore}
-                        </p>
+                        <div className="flex items-center justify-end gap-2 mt-1">
+                          <span
+                            className="text-xs font-bold px-2.5 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor:
+                                totalScore >= 5 ? "#fee2e2" : "#dcfce7",
+                              color: totalScore >= 5 ? "#991b1b" : "#166534",
+                            }}
+                          >
+                            Score: {totalScore}
+                          </span>
+                          {totalScore >= 5 && (
+                            <span
+                              className="text-xs font-bold px-2 py-0.5 rounded-full"
+                              style={{
+                                backgroundColor: "#fee2e2",
+                                color: "#991b1b",
+                              }}
+                            >
+                              Challan Generated
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </CardTitle>
                   </CardHeader>
@@ -161,7 +199,7 @@ export default function ChallanManagementPage() {
                                 {violation.violationType}
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                {new Date(violation.timestamp).toLocaleString()}
+                                {formatDateTime(violation.timestamp)}
                               </p>
                             </div>
                             <div className="text-right">
@@ -181,22 +219,35 @@ export default function ChallanManagementPage() {
                     </div>
 
                     <div className="flex gap-2 pt-2">
-                      <Button
-                        onClick={() =>
-                          navigate({
-                            to: "/challan-preview",
-                            search: {
-                              vehicleNo: vehicleNo,
-                              timestamp: vehicleViolations[0].timestamp,
-                            },
-                          })
-                        }
-                        className="flex-1"
-                      >
-                        View Challan
-                      </Button>
+                      {totalScore >= 5 ? (
+                        <Button
+                          data-ocid="challans.view_challan.button"
+                          onClick={() =>
+                            navigate({
+                              to: "/challan-preview",
+                            })
+                          }
+                          className="flex-1 text-white"
+                          style={{ backgroundColor: "#0B3D91" }}
+                        >
+                          View Challan
+                        </Button>
+                      ) : (
+                        <div
+                          className="flex-1 flex items-center justify-center px-3 py-2 rounded text-xs font-semibold text-center"
+                          style={{
+                            backgroundColor: "#f3f4f6",
+                            color: "#6b7280",
+                            border: "1px solid #e5e7eb",
+                            borderRadius: "6px",
+                          }}
+                        >
+                          Challan not generated (score: {totalScore})
+                        </div>
+                      )}
                       <Button
                         variant="outline"
+                        data-ocid="challans.vehicle_details.button"
                         onClick={() =>
                           navigate({
                             to: "/vehicle-details",

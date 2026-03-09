@@ -13,5 +13,5 @@ export function normalizeImageUrl(imageUrl: string | undefined): string {
   }
 
   // Otherwise, prefix with the production backend uploads path
-  return `https://vehicle-blackbox-system.onrender.com/uploads/${imageUrl}`;
+  return `https://vehicle-blackbox-system-1.onrender.com/uploads/${imageUrl}`;
 }

@@ -3,6 +3,24 @@ import type { NodeViolation } from "@/lib/api";
 import { normalizeImageUrl } from "@/lib/violations/images";
 import { Car, FileText, Phone, Siren, User } from "lucide-react";
 
+function formatDateTime(timestamp: string | number): string {
+  if (!timestamp) return "—";
+  let d = new Date(timestamp as string);
+  if (Number.isNaN(d.getTime()) && typeof timestamp === "string") {
+    const asNum = Number(timestamp);
+    if (!Number.isNaN(asNum)) d = new Date(asNum);
+  }
+  if (Number.isNaN(d.getTime())) return String(timestamp);
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 interface LatestViolationCardProps {
   violation: NodeViolation;
   onViewChallan: () => void;
@@ -55,7 +73,7 @@ export default function LatestViolationCard({
             borderRadius: "2px",
           }}
         >
-          {new Date(violation.timestamp).toLocaleTimeString("en-IN")}
+          {formatDateTime(violation.timestamp)}
         </span>
       </div>
 
@@ -131,14 +149,7 @@ export default function LatestViolationCard({
                   Time
                 </p>
                 <p className="text-sm font-semibold text-gray-700">
-                  {new Date(violation.timestamp).toLocaleString("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    hour12: true,
-                  })}
+                  {formatDateTime(violation.timestamp)}
                 </p>
               </div>
             </div>

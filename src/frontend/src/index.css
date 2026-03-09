@@ -142,3 +142,23 @@
     border-color: var(--india-green);
   }
 }
+
+/* ---- Print / PDF styles ---- */
+@media print {
+  /* Hide everything except the challan print content */
+  body > * {
+    display: none !important;
+  }
+  #challan-print-content {
+    display: block !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+  /* Ensure backgrounds and colors print */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

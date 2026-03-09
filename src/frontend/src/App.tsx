@@ -7,11 +7,13 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import PortalLayout from "./components/PortalLayout";
+import AlertsPage from "./pages/AlertsPage";
 import ChallanManagementPage from "./pages/ChallanManagementPage";
 import ChallanPreviewPage from "./pages/ChallanPreviewPage";
 import DashboardPage from "./pages/DashboardPage";
 import LiveViolationsPage from "./pages/LiveViolationsPage";
 import VehicleDetailsPage from "./pages/VehicleDetailsPage";
+import ViolationAnalyticsPage from "./pages/ViolationAnalyticsPage";
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -52,12 +54,26 @@ const challanPreviewRoute = createRoute({
   component: ChallanPreviewPage,
 });
 
+const violationAnalyticsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/analytics",
+  component: ViolationAnalyticsPage,
+});
+
+const alertsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/alerts",
+  component: AlertsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   violationsRoute,
   challansRoute,
   vehicleDetailsRoute,
   challanPreviewRoute,
+  violationAnalyticsRoute,
+  alertsRoute,
 ]);
 
 const router = createRouter({ routeTree });
