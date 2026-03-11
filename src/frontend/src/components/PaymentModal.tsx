@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import type { NodeViolation } from "@/lib/api";
 import { getViolationFine, getViolationId, payViolation } from "@/lib/api";
+import { markGroupPaid } from "@/lib/violationGroups";
 import {
   CheckCircle2,
   CreditCard,
@@ -26,6 +27,7 @@ interface PaymentModalProps {
   vehicleNo: string;
   challanId: string;
   totalFine: number;
+  groupId?: string;
   onPaymentSuccess: (vehicleNo: string) => void;
 }
 
@@ -38,6 +40,7 @@ export default function PaymentModal({
   vehicleNo,
   challanId,
   totalFine,
+  groupId,
   onPaymentSuccess,
 }: PaymentModalProps) {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>("upi");
@@ -69,6 +72,9 @@ export default function PaymentModal({
       }
       await new Promise((r) => setTimeout(r, 1500));
       setIsPaid(true);
+      if (groupId) {
+        markGroupPaid(groupId);
+      }
       onPaymentSuccess(vehicleNo);
     } finally {
       setIsPaying(false);

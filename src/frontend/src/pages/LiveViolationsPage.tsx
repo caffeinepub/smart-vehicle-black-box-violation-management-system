@@ -19,8 +19,13 @@ import {
   fetchViolations,
   getViolationFine,
 } from "@/lib/api";
+import {
+  buildViolationGroups,
+  getPaidGroupIds,
+  isInsideCamViolation,
+  markGroupPaid,
+} from "@/lib/violationGroups";
 import { normalizeImageUrl } from "@/lib/violations/images";
-import { useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
   AlertTriangle,
@@ -135,80 +140,65 @@ function getStatusBadge(
 }
 
 export default function LiveViolationsPage() {
-  const navigate = useNavigate();
   const [violations, setViolations] = useState<NodeViolation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [challanModalOpen, setChallanModalOpen] = useState(false);
-  const [challanVehicleNo, setChallanVehicleNo] = useState<string>("");
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [paymentVehicleNo, setPaymentVehicleNo] = useState<string>("");
-  const [paidVehicles, setPaidVehicles] = useState<Set<string>>(new Set());
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const previousViolationsRef = useRef<Set<string>>(new Set());
-  const previousTotalScoreRef = useRef<number>(0);
+  const [challanModalOpen, setChallanModalOpen] = useState(false);
+  const [challanVehicleNo, setChallanVehicleNo] = useState("");
+  const [challanGroupViolations, setChallanGroupViolations] = useState<
+    NodeViolation[] | undefined
+  >(undefined);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentVehicleNo, setPaymentVehicleNo] = useState("");
+  const [paymentGroupId, setPaymentGroupId] = useState<string | undefined>(
+    undefined,
+  );
+  const [paidVehicles, setPaidVehicles] = useState<Set<string>>(new Set());
+  const [paidGroupIds, setPaidGroupIds] = useState<Set<string>>(() =>
+    getPaidGroupIds(),
+  );
 
-  const loadViolations = async () => {
-    try {
-      setError(null);
-      const data = await fetchViolations();
-      const newViolations = data.filter(
-        (v) =>
-          !previousViolationsRef.current.has(`${v.vehicleNo}-${v.timestamp}`),
-      );
-      if (newViolations.length > 0 && previousViolationsRef.current.size > 0) {
-        for (const v of newViolations) {
-          showNotification(
-            "Traffic Violation Detected",
-            "alert",
-            `Detected at ${formatDateTime(v.timestamp)}`,
-            v.vehicleNo,
-            v.violationType,
-            v.score,
-            v.fineAmount,
-          );
-        }
-      }
-      const totalScore = data.reduce((sum, v) => sum + v.score, 0);
-      if (
-        totalScore >= 5 &&
-        previousTotalScoreRef.current < 5 &&
-        previousViolationsRef.current.size > 0
-      ) {
-        showNotification(
-          "Multiple Violations Detected – Data Forwarded to Authorities",
-          "report",
-          "Total score ≥5. Challan auto-generated.",
+  const previousViolationsRef = useRef<Set<string>>(new Set());
+
+  const loadViolations = () => {
+    fetchViolations()
+      .then((data) => {
+        const newV = data.filter(
+          (v) =>
+            !previousViolationsRef.current.has(`${v.vehicleNo}-${v.timestamp}`),
         );
-      }
-      previousViolationsRef.current = new Set(
-        data.map((v) => `${v.vehicleNo}-${v.timestamp}`),
-      );
-      previousTotalScoreRef.current = totalScore;
-      setViolations(data);
-      setLastUpdated(new Date());
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch violations",
-      );
-    } finally {
-      setLoading(false);
-    }
+        if (newV.length > 0 && previousViolationsRef.current.size > 0) {
+          for (const v of newV) {
+            showNotification(
+              "Traffic Violation Detected",
+              "alert",
+              `Detected at ${formatDateTime(v.timestamp)}`,
+              v.vehicleNo,
+              v.violationType,
+              v.score,
+              v.fineAmount,
+            );
+          }
+        }
+        previousViolationsRef.current = new Set(
+          data.map((v) => `${v.vehicleNo}-${v.timestamp}`),
+        );
+        setViolations(data);
+        setError(null);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load data");
+      })
+      .finally(() => setLoading(false));
   };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: loadViolations is stable
   useEffect(() => {
     loadViolations();
   }, []);
-  useInterval(() => {
-    loadViolations();
-  }, 3000);
+  useInterval(loadViolations, 2000);
 
-  const vehicleScoreMap = buildVehicleScoreMap(violations);
-  const globalTotalScore = violations.reduce((sum, v) => sum + v.score, 0);
-
-  // Sort descending by timestamp
   const sortedViolations = [...violations].sort((a, b) => {
     const ta =
       typeof a.timestamp === "number"
@@ -221,267 +211,298 @@ export default function LiveViolationsPage() {
     return tb - ta;
   });
 
-  const latestViolation = sortedViolations[0] ?? null;
-  const challanVehicleFine = challanVehicleNo
-    ? getVehicleTotalFine(challanVehicleNo, violations)
-    : 0;
-  const challanVehicleScore = challanVehicleNo
-    ? (vehicleScoreMap.get(challanVehicleNo) ?? 0)
-    : 0;
+  const vehicleScoreMap = buildVehicleScoreMap(violations);
 
-  const handleViewChallan = (vehicleNo: string) => {
-    setChallanVehicleNo(vehicleNo);
-    setChallanModalOpen(true);
-  };
-  const handleOpenPayment = (vehicleNo: string) => {
-    setPaymentVehicleNo(vehicleNo);
-    setPaymentModalOpen(true);
-  };
+  // Violation groups for current group progress
+  const violationGroups = buildViolationGroups(violations, paidGroupIds);
+  const currentGroup = violationGroups.find((g) => !g.isComplete);
+
   const handlePaymentSuccess = (vehicleNo: string) => {
     setPaidVehicles((prev) => new Set(prev).add(vehicleNo));
-  };
-  const handleViewVehicle = (vehicleNo: string) => {
-    navigate({ to: "/vehicle-details", search: { vehicleNo } });
+    setPaidGroupIds(getPaidGroupIds());
   };
 
-  const CARD_BG = "#f8fafc";
-  const CARD_BORDER = "#e2e8f0";
+  const handleViewChallan = (
+    vehicleNo: string,
+    groupViolations?: NodeViolation[],
+  ) => {
+    setChallanVehicleNo(vehicleNo);
+    setChallanGroupViolations(groupViolations);
+    setChallanModalOpen(true);
+  };
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="border-l-4 pl-6" style={{ borderLeftColor: "#0B0B60" }}>
-          <h1 className="text-2xl font-bold mb-1" style={{ color: "#1f2937" }}>
-            Live Violation Monitoring
-          </h1>
-          <p className="text-sm" style={{ color: "#6b7280" }}>
-            Real-time traffic violations — SAFEWAY Smart Monitoring System
-          </p>
-        </div>
-        <div
-          data-ocid="violations.loading_state"
-          className="flex items-center justify-center py-16 rounded-lg"
-          style={{
-            backgroundColor: CARD_BG,
-            border: `1px solid ${CARD_BORDER}`,
-          }}
-        >
-          <Loader2
-            className="w-6 h-6 animate-spin"
-            style={{ color: "#16a34a" }}
-          />
-          <span className="ml-3 font-medium" style={{ color: "#6b7280" }}>
-            Connecting to enforcement network...
-          </span>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <div className="border-l-4 pl-6" style={{ borderLeftColor: "#0B0B60" }}>
-          <h1 className="text-2xl font-bold mb-1" style={{ color: "#1f2937" }}>
-            Live Violation Monitoring
-          </h1>
-        </div>
-        <div
-          data-ocid="violations.error_state"
-          className="p-6 flex items-start gap-3 rounded-lg"
-          style={{ backgroundColor: "#fee2e2", border: "1px solid #fecaca" }}
-        >
-          <AlertCircle
-            className="w-6 h-6 flex-shrink-0 mt-0.5"
-            style={{ color: "#dc2626" }}
-          />
-          <div>
-            <h3 className="font-semibold mb-1" style={{ color: "#dc2626" }}>
-              System Connection Error
-            </h3>
-            <p className="text-sm" style={{ color: "#dc2626" }}>
-              {error}
-            </p>
-            <button
-              type="button"
-              onClick={loadViolations}
-              className="mt-3 text-sm underline font-medium"
-              style={{ color: "#dc2626" }}
-            >
-              Retry connection
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleOpenPayment = (vehicleNo: string, gId?: string) => {
+    setPaymentVehicleNo(vehicleNo);
+    setPaymentGroupId(gId);
+    setPaymentModalOpen(true);
+  };
 
   return (
-    <div className="space-y-5">
-      {/* Page Header */}
-      <div className="border-l-4 pl-5" style={{ borderLeftColor: "#0B0B60" }}>
-        <h1 className="text-2xl font-bold mb-1" style={{ color: "#1f2937" }}>
-          Live Violation Monitoring
+    <div className="space-y-6">
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.85)" }}
+          onClick={() => setLightboxUrl(null)}
+          onKeyDown={(e) => e.key === "Escape" && setLightboxUrl(null)}
+          aria-label="Close lightbox overlay"
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 p-1 rounded-full"
+            style={{ background: "rgba(0,0,0,0.7)", color: "#fff" }}
+            onClick={() => setLightboxUrl(null)}
+            aria-label="Close"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="Violation evidence"
+            className="max-w-full max-h-screen object-contain"
+            style={{ borderRadius: "8px", padding: "1rem" }}
+          />
+        </div>
+      )}
+
+      {/* Page header */}
+      <div className="border-l-4 pl-5 py-3" style={{ borderColor: "#0B0B60" }}>
+        <h1
+          className="text-2xl md:text-3xl font-extrabold mb-1"
+          style={{ color: "#1f2937" }}
+        >
+          Live Violations
         </h1>
         <p className="text-sm" style={{ color: "#6b7280" }}>
-          Real-time traffic violations — SAFEWAY Smart Monitoring System
+          Real-time traffic violation monitoring · Auto-refresh every 2s
         </p>
       </div>
 
-      {/* Status Bar */}
-      {lastUpdated && (
+      {/* Current Group Progress Card */}
+      <section data-ocid="violations.current_group.card">
         <div
-          className="flex items-center justify-between text-xs px-4 py-2.5 rounded-lg"
+          className="rounded-xl p-5 shadow-sm"
           style={{
-            backgroundColor: CARD_BG,
-            border: `1px solid ${CARD_BORDER}`,
+            backgroundColor: "#f8fafc",
+            border: "2px solid #e2e8f0",
           }}
         >
-          <div className="flex items-center gap-2">
-            <span
-              className="inline-block w-2 h-2 rounded-full"
-              style={{
-                backgroundColor: "#22c55e",
-                boxShadow: "none",
-                animation: "pulse 2s infinite",
-              }}
-            />
-            <span className="font-semibold" style={{ color: "#16a34a" }}>
-              Live
-            </span>
-            <span style={{ color: "#e2e8f0" }}>—</span>
-            <span style={{ color: "#6b7280" }}>
-              Auto-refreshing every 3 seconds
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" style={{ color: "#f97316" }} />
+              <h2
+                className="text-xs font-bold uppercase tracking-widest"
+                style={{ color: "#374151" }}
+              >
+                Current Group Progress
+              </h2>
+            </div>
+            <span className="text-xs font-mono" style={{ color: "#6b7280" }}>
+              {violationGroups.length} group
+              {violationGroups.length !== 1 ? "s" : ""} total
             </span>
           </div>
-          <span className="font-mono" style={{ color: "#6b7280" }}>
-            Last updated:{" "}
-            <span className="font-semibold" style={{ color: "#374151" }}>
-              {lastUpdated.toLocaleTimeString("en-IN")}
-            </span>
-          </span>
-        </div>
-      )}
 
-      {/* Multiple violation alert */}
-      {globalTotalScore >= 5 && (
-        <div
-          data-ocid="violations.score_alert.panel"
-          className="flex items-start gap-4 px-5 py-4 rounded-lg shadow-lg"
-          style={{
-            background: "#fee2e2",
-            border: "2px solid #dc2626",
-          }}
-          role="alert"
-        >
-          <Siren
-            className="w-6 h-6 flex-shrink-0 mt-0.5"
-            style={{ color: "#dc2626" }}
-          />
-          <div className="flex-1">
-            <p
-              className="font-extrabold text-base leading-tight tracking-wide"
-              style={{ color: "#dc2626" }}
-            >
-              ⚠ Multiple Violations Detected – Data forwarded to authorities
-            </p>
-            <p
-              className="text-sm font-semibold mt-1"
-              style={{ color: "#dc2626" }}
-            >
-              Challan Generated
-            </p>
-          </div>
-          <AlertTriangle
-            className="w-5 h-5 flex-shrink-0 mt-0.5"
-            style={{ color: "#dc2626" }}
-          />
-        </div>
-      )}
+          {currentGroup ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span
+                      className="text-xs font-semibold"
+                      style={{ color: "#374151" }}
+                    >
+                      Score Accumulation
+                    </span>
+                    <span
+                      className="text-xs font-bold"
+                      style={{ color: "#f97316" }}
+                    >
+                      {currentGroup.totalScore} / 5
+                    </span>
+                  </div>
+                  <div
+                    className="w-full h-3 rounded-full overflow-hidden"
+                    style={{ backgroundColor: "#e2e8f0" }}
+                  >
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min((currentGroup.totalScore / 5) * 100, 100)}%`,
+                        backgroundColor:
+                          currentGroup.totalScore >= 4
+                            ? "#ef4444"
+                            : currentGroup.totalScore >= 2
+                              ? "#f97316"
+                              : "#22c55e",
+                      }}
+                    />
+                  </div>
+                </div>
+                <span
+                  className="text-2xl font-black"
+                  style={{
+                    color:
+                      currentGroup.totalScore >= 4
+                        ? "#dc2626"
+                        : currentGroup.totalScore >= 2
+                          ? "#f97316"
+                          : "#16a34a",
+                  }}
+                >
+                  {currentGroup.totalScore}
+                </span>
+              </div>
 
-      {violations.length === 0 ? (
-        <div data-ocid="violations.empty_state">
-          <EmptyState message="No violations recorded yet. System is actively monitoring." />
-        </div>
-      ) : (
-        <>
-          {latestViolation && (
-            <LatestViolationCard
-              violation={latestViolation}
-              onViewChallan={() => handleViewChallan(latestViolation.vehicleNo)}
-              onViewVehicle={() => handleViewVehicle(latestViolation.vehicleNo)}
-            />
+              <div className="flex flex-wrap gap-2">
+                {currentGroup.violations.map((v) => (
+                  <span
+                    key={`cv-${v.violationType}-${v.timestamp}`}
+                    className="text-xs px-2 py-0.5 rounded font-medium"
+                    style={{
+                      backgroundColor: "#f1f5f9",
+                      color: "#374151",
+                      border: "1px solid #e2e8f0",
+                    }}
+                  >
+                    {v.violationType}
+                    <span
+                      className="ml-1 font-bold"
+                      style={{ color: "#0B0B60" }}
+                    >
+                      +{v.score}
+                    </span>
+                  </span>
+                ))}
+              </div>
+
+              <p className="text-xs" style={{ color: "#6b7280" }}>
+                {5 - currentGroup.totalScore} more score point
+                {5 - currentGroup.totalScore !== 1 ? "s" : ""} until challan is
+                generated.
+              </p>
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-sm" style={{ color: "#6b7280" }}>
+                {violations.length === 0
+                  ? "No violations recorded yet."
+                  : "All violation groups have reached threshold. Awaiting new violations."}
+              </p>
+            </div>
           )}
+        </div>
+      </section>
 
+      {/* Latest violation card */}
+      {sortedViolations.length > 0 && (
+        <LatestViolationCard
+          violation={sortedViolations[0]}
+          onViewChallan={() => handleViewChallan(sortedViolations[0].vehicleNo)}
+          onViewVehicle={() => {}}
+        />
+      )}
+
+      {/* Violation table */}
+      <section data-ocid="violations.table.section">
+        {loading ? (
+          <div
+            data-ocid="violations.table.loading_state"
+            className="flex items-center justify-center py-12 gap-2"
+            style={{ color: "#6b7280" }}
+          >
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span>Loading violations...</span>
+          </div>
+        ) : error ? (
+          <div
+            data-ocid="violations.table.error_state"
+            className="rounded-xl border p-6 text-center"
+            style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}
+          >
+            <AlertCircle
+              className="w-8 h-8 mx-auto mb-2"
+              style={{ color: "#dc2626" }}
+            />
+            <p className="text-sm font-semibold" style={{ color: "#dc2626" }}>
+              {error}
+            </p>
+          </div>
+        ) : sortedViolations.length === 0 ? (
+          <EmptyState
+            data-ocid="violations.table.empty_state"
+            message="No violations recorded yet. The monitoring system is active."
+          />
+        ) : (
           <div
             className="rounded-xl shadow-md overflow-hidden"
             style={{
               backgroundColor: "#ffffff",
-              border: `1px solid ${CARD_BORDER}`,
+              border: "1px solid #e2e8f0",
             }}
           >
             <div
-              className="px-5 py-3 flex items-center justify-between"
+              className="px-5 py-3 flex items-center gap-2"
               style={{ backgroundColor: "#f1f5f9" }}
             >
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" style={{ color: "#16a34a" }} />
-                <span
-                  className="font-bold text-sm uppercase tracking-widest"
-                  style={{ color: "#374151" }}
-                >
-                  Violation Records
-                </span>
-              </div>
-              <span className="text-xs font-mono" style={{ color: "#6b7280" }}>
-                {violations.length} record{violations.length !== 1 ? "s" : ""}
+              <Siren className="w-4 h-4" style={{ color: "#0B0B60" }} />
+              <span
+                className="font-bold text-sm uppercase tracking-widest"
+                style={{ color: "#374151" }}
+              >
+                Violation Records
+              </span>
+              <span
+                className="ml-auto text-xs font-mono"
+                style={{ color: "#6b7280" }}
+              >
+                {sortedViolations.length} records
               </span>
             </div>
             <div className="overflow-x-auto">
               <Table data-ocid="violations.table">
                 <TableHeader>
                   <TableRow
-                    className="hover:bg-transparent border-b"
-                    style={{
-                      backgroundColor: "#f1f5f9",
-                      borderColor: "#dbeafe",
-                    }}
+                    className="hover:bg-transparent"
+                    style={{ backgroundColor: "#f8fafc" }}
                   >
                     {[
-                      "Vehicle Number",
-                      "Owner Name",
-                      "Violation Type",
+                      "#",
+                      "Vehicle No.",
+                      "Owner",
+                      "Violation",
+                      "Camera",
                       "Score",
-                      "Fine Amount",
+                      "Fine",
                       "Date & Time",
-                      "Violation Image",
+                      "Image",
                       "Status",
-                      "Action",
-                    ].map((col) => (
+                      "Actions",
+                    ].map((h) => (
                       <TableHead
-                        key={col}
-                        className="font-bold text-xs uppercase tracking-wider py-3 whitespace-nowrap"
+                        key={h}
+                        className="text-xs font-bold uppercase tracking-wider py-3 whitespace-nowrap"
                         style={{ color: "#6b7280" }}
                       >
-                        {col}
+                        {h}
                       </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedViolations.map((violation, index) => {
-                    const imageUrl = normalizeImageUrl(violation.imageUrl);
-                    const vehicleScore =
-                      vehicleScoreMap.get(violation.vehicleNo) ?? 0;
-                    const isPaidVehicle = paidVehicles.has(violation.vehicleNo);
-                    const showChallanActions = vehicleScore >= 5;
+                  {sortedViolations.map((v, index) => {
+                    const imageUrl = normalizeImageUrl(v.imageUrl);
+                    const vehicleScore = vehicleScoreMap.get(v.vehicleNo) ?? 0;
+                    const isPaidVehicle = paidVehicles.has(v.vehicleNo);
+                    const showActions = vehicleScore >= 5;
+                    const inside = isInsideCamViolation(v.violationType);
                     const rowNum = index + 1;
-                    const ownerName = violation.ownerName || DEFAULT_OWNER;
-                    const ownerMobile = violation.mobile || DEFAULT_MOBILE;
+                    const ownerName = v.ownerName || DEFAULT_OWNER;
 
                     return (
                       <TableRow
-                        key={`${violation.vehicleNo}-${violation.timestamp}-${index}`}
+                        key={`${v.vehicleNo}-${v.timestamp}-${index}`}
                         data-ocid={`violations.row.${rowNum}`}
                         className="border-b transition-colors"
                         style={{
@@ -502,85 +523,102 @@ export default function LiveViolationsPage() {
                         }}
                       >
                         <TableCell
-                          className="font-bold text-sm py-3 font-mono tracking-wide"
-                          style={{ color: "#0B0B60" }}
+                          className="py-3 text-xs font-mono"
+                          style={{ color: "#9ca3af" }}
                         >
-                          {violation.vehicleNo}
+                          {rowNum}
                         </TableCell>
                         <TableCell
-                          className="text-sm py-3 font-medium"
+                          className="font-bold font-mono tracking-wide py-3"
+                          style={{ color: "#0B0B60" }}
+                        >
+                          {v.vehicleNo}
+                        </TableCell>
+                        <TableCell
+                          className="py-3 text-sm"
                           style={{ color: "#374151" }}
                         >
-                          <div>{ownerName}</div>
+                          <div className="font-medium">{ownerName}</div>
                           <div className="text-xs" style={{ color: "#6b7280" }}>
-                            {ownerMobile}
+                            {v.mobile || DEFAULT_MOBILE}
                           </div>
                         </TableCell>
                         <TableCell
-                          className="text-sm py-3"
+                          className="py-3 font-semibold text-sm"
                           style={{ color: "#1f2937" }}
                         >
-                          <span className="font-semibold">
-                            {violation.violationType}
+                          {v.violationType}
+                        </TableCell>
+                        <TableCell className="py-3">
+                          <span
+                            className="text-xs font-bold px-2 py-0.5 rounded"
+                            style={{
+                              backgroundColor: inside ? "#eff6ff" : "#f0fdf4",
+                              color: inside ? "#1d4ed8" : "#15803d",
+                              border: inside
+                                ? "1px solid #bfdbfe"
+                                : "1px solid #bbf7d0",
+                            }}
+                          >
+                            {inside ? "Inside" : "Outside"}
                           </span>
                         </TableCell>
                         <TableCell className="py-3">
                           <span
-                            className="font-black text-sm px-2.5 py-1 rounded-full"
+                            className="font-black text-xs px-2.5 py-1 rounded-full"
                             style={{
                               backgroundColor:
-                                violation.score >= 5
+                                v.score >= 5
                                   ? "#fee2e2"
-                                  : violation.score >= 3
+                                  : v.score >= 3
                                     ? "#fff7ed"
                                     : "#dcfce7",
                               color:
-                                violation.score >= 5
+                                v.score >= 5
                                   ? "#dc2626"
-                                  : violation.score >= 3
+                                  : v.score >= 3
                                     ? "#d97706"
                                     : "#16a34a",
                             }}
                           >
-                            {violation.score}
+                            {v.score}
                           </span>
                         </TableCell>
                         <TableCell
                           className="py-3 font-semibold text-sm"
                           style={{ color: "#dc2626" }}
-                        >{`₹${getViolationFine(violation).toLocaleString("en-IN")}`}</TableCell>
+                        >
+                          ₹{getViolationFine(v).toLocaleString("en-IN")}
+                        </TableCell>
                         <TableCell
-                          className="text-sm py-3 whitespace-nowrap font-mono text-xs"
+                          className="py-3 text-xs font-mono whitespace-nowrap"
                           style={{ color: "#374151" }}
                         >
-                          {formatDateTime(violation.timestamp)}
+                          {formatDateTime(v.timestamp)}
                         </TableCell>
                         <TableCell className="py-3">
                           {imageUrl ? (
                             <button
                               type="button"
                               onClick={() => setLightboxUrl(imageUrl)}
-                              className="block focus:outline-none rounded"
+                              className="block focus:outline-none"
                               aria-label="View evidence"
                             >
                               <img
                                 src={imageUrl}
                                 alt="Evidence"
-                                className="w-16 h-12 object-cover cursor-zoom-in transition-all hover:opacity-80"
-                                style={{
-                                  borderRadius: "3px",
-                                  border: "1px solid #e2e8f0",
-                                }}
+                                className="w-16 h-12 object-cover rounded cursor-zoom-in hover:opacity-80 transition"
+                                style={{ border: "1px solid #e2e8f0" }}
                                 onError={(e) => {
                                   e.currentTarget.src =
-                                    'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="64" height="48"%3E%3Crect fill="%23111827" width="64" height="48"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%2364748b" font-size="8"%3ENo Image%3C/text%3E%3C/svg%3E';
+                                    'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="64" height="48"%3E%3Crect fill="%23f1f5f9" width="64" height="48"/%3E%3C/svg%3E';
                                 }}
                               />
                             </button>
                           ) : (
                             <span
                               className="text-xs italic"
-                              style={{ color: "#6b7280" }}
+                              style={{ color: "#9ca3af" }}
                             >
                               No image
                             </span>
@@ -590,96 +628,44 @@ export default function LiveViolationsPage() {
                           {getStatusBadge(vehicleScore, isPaidVehicle)}
                         </TableCell>
                         <TableCell className="py-3">
-                          {showChallanActions ? (
-                            <div className="flex flex-col gap-1.5">
+                          {showActions ? (
+                            <div className="flex gap-1.5 flex-wrap">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                data-ocid={`violations.download_button.${rowNum}`}
+                                onClick={() => handleViewChallan(v.vehicleNo)}
+                                className="text-xs h-7 px-2 whitespace-nowrap"
+                                style={{
+                                  borderColor: "#16a34a",
+                                  color: "#16a34a",
+                                  borderRadius: "3px",
+                                }}
+                              >
+                                <Download className="w-3 h-3 mr-1" />
+                                Challan
+                              </Button>
                               {!isPaidVehicle && (
-                                <div>
-                                  <p
-                                    className="text-xs font-semibold leading-tight"
-                                    style={{ color: "#dc2626" }}
-                                  >
-                                    Multiple Violations Detected – Data
-                                    forwarded to authorities
-                                  </p>
-                                  <p
-                                    className="text-xs font-medium mt-0.5 mb-1.5"
-                                    style={{ color: "#dc2626" }}
-                                  >
-                                    Challan Generated
-                                  </p>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <Button
                                   size="sm"
-                                  variant="outline"
-                                  data-ocid={`violations.download_challan_button.${rowNum}`}
-                                  onClick={() =>
-                                    handleViewChallan(violation.vehicleNo)
-                                  }
+                                  data-ocid={`violations.pay_button.${rowNum}`}
+                                  onClick={() => handleOpenPayment(v.vehicleNo)}
                                   className="text-xs h-7 px-2 whitespace-nowrap"
                                   style={{
-                                    borderColor: "#22c55e",
-                                    color: "#16a34a",
-                                    backgroundColor: "transparent",
+                                    backgroundColor: "#15803d",
+                                    color: "#ffffff",
                                     borderRadius: "3px",
                                   }}
-                                  onMouseEnter={(e) => {
-                                    (
-                                      e.currentTarget as HTMLButtonElement
-                                    ).style.backgroundColor = "#22c55e";
-                                    (
-                                      e.currentTarget as HTMLButtonElement
-                                    ).style.color = "#000";
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    (
-                                      e.currentTarget as HTMLButtonElement
-                                    ).style.backgroundColor = "transparent";
-                                    (
-                                      e.currentTarget as HTMLButtonElement
-                                    ).style.color = "#22c55e";
-                                  }}
                                 >
-                                  <Download className="w-3 h-3 mr-1" />
-                                  Challan
+                                  <CreditCard className="w-3 h-3 mr-1" />
+                                  Pay Fine
                                 </Button>
-                                {isPaidVehicle ? (
-                                  <span
-                                    className="text-xs font-bold px-2 py-1 rounded"
-                                    style={{
-                                      backgroundColor: "#dcfce7",
-                                      color: "#16a34a",
-                                      border: "1px solid #bbf7d0",
-                                    }}
-                                  >
-                                    <CheckCircle2 className="w-3 h-3 inline mr-1" />
-                                    Fine Paid
-                                  </span>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    data-ocid={`violations.pay_challan_button.${rowNum}`}
-                                    onClick={() =>
-                                      handleOpenPayment(violation.vehicleNo)
-                                    }
-                                    className="text-xs h-7 px-2 whitespace-nowrap"
-                                    style={{
-                                      backgroundColor: "#15803d",
-                                      color: "#fff",
-                                      borderRadius: "3px",
-                                    }}
-                                  >
-                                    <CreditCard className="w-3 h-3 mr-1" />
-                                    Pay Fine
-                                  </Button>
-                                )}
-                              </div>
+                              )}
                             </div>
                           ) : (
                             <span
                               className="text-xs italic"
-                              style={{ color: "#6b7280" }}
+                              style={{ color: "#9ca3af" }}
                             >
                               —
                             </span>
@@ -692,63 +678,35 @@ export default function LiveViolationsPage() {
               </Table>
             </div>
           </div>
-        </>
-      )}
+        )}
+      </section>
 
+      {/* Challan Preview Modal */}
       <ChallanPreviewModal
         open={challanModalOpen}
-        onOpenChange={setChallanModalOpen}
+        onOpenChange={(open) => {
+          setChallanModalOpen(open);
+          if (!open) setChallanGroupViolations(undefined);
+        }}
         violations={violations}
         vehicleNo={challanVehicleNo}
-        totalScore={challanVehicleScore}
-        totalFine={challanVehicleFine}
+        totalScore={vehicleScoreMap.get(challanVehicleNo) ?? 0}
+        totalFine={getVehicleTotalFine(challanVehicleNo, violations)}
         isPaid={paidVehicles.has(challanVehicleNo)}
-        data-ocid="violations.challan_modal.dialog"
+        groupViolations={challanGroupViolations}
       />
+
+      {/* Payment Modal */}
       <PaymentModal
         open={paymentModalOpen}
         onOpenChange={setPaymentModalOpen}
         violations={violations}
         vehicleNo={paymentVehicleNo}
         challanId={`SMVB-${Date.now().toString().slice(-8)}`}
-        totalFine={
-          paymentVehicleNo
-            ? getVehicleTotalFine(paymentVehicleNo, violations)
-            : 0
-        }
+        totalFine={getVehicleTotalFine(paymentVehicleNo, violations)}
+        groupId={paymentGroupId}
         onPaymentSuccess={handlePaymentSuccess}
       />
-
-      {lightboxUrl && (
-        <div
-          data-ocid="violations.evidence.modal"
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.92)" }}
-          onClick={() => setLightboxUrl(null)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setLightboxUrl(null);
-          }}
-          tabIndex={-1}
-          aria-modal="true"
-        >
-          <button
-            type="button"
-            data-ocid="violations.evidence.close_button"
-            onClick={() => setLightboxUrl(null)}
-            className="absolute top-4 right-4 text-white rounded-full p-2"
-            aria-label="Close"
-          >
-            <X className="w-7 h-7" />
-          </button>
-          {/* biome-ignore lint/a11y/useKeyWithClickEvents: propagation-stop only */}
-          <img
-            src={lightboxUrl}
-            alt="Evidence fullscreen"
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
     </div>
   );
 }
