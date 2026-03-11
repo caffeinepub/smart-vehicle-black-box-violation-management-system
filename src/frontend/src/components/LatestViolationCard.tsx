@@ -58,7 +58,7 @@ export default function LatestViolationCard({
         style={{
           background: isAccident
             ? "linear-gradient(90deg, #dc2626, #b91c1c)"
-            : "linear-gradient(90deg, #1d4ed8, #1e3a8a)",
+            : "linear-gradient(90deg, #0B0B60, #0B0B60)",
         }}
       >
         <Siren className="w-5 h-5 flex-shrink-0" style={{ color: "#fca5a5" }} />

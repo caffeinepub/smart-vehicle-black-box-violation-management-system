@@ -36,7 +36,7 @@ export default function PortalNav() {
     <nav
       className="border-t"
       style={{
-        backgroundColor: "#1e3a8a",
+        backgroundColor: "#0B0B60",
         borderColor: "rgba(255,255,255,0.15)",
       }}
       aria-label="Main navigation"

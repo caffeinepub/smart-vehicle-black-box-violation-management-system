@@ -139,8 +139,8 @@ export default function PaymentModal({
         <div
           className="text-white px-6 py-5"
           style={{
-            background: "linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%)",
-            borderBottom: "3px solid #1e40af",
+            background: "linear-gradient(135deg, #0B0B60 0%, #0B0B60 100%)",
+            borderBottom: "3px solid #0B0B60",
           }}
         >
           <p
@@ -195,7 +195,7 @@ export default function PaymentModal({
                 </span>
                 <span
                   className="font-black font-mono tracking-wide"
-                  style={{ color: "#1d4ed8" }}
+                  style={{ color: "#0B0B60" }}
                 >
                   {vehicleNo}
                 </span>
@@ -272,7 +272,7 @@ export default function PaymentModal({
                 <p className="text-xs" style={{ color: "#6b7280" }}>
                   Vehicle
                 </p>
-                <p className="font-bold font-mono" style={{ color: "#1d4ed8" }}>
+                <p className="font-bold font-mono" style={{ color: "#0B0B60" }}>
                   {vehicleNo}
                 </p>
                 <p className="text-xs" style={{ color: "#6b7280" }}>
@@ -302,10 +302,10 @@ export default function PaymentModal({
                         selectedMethod === method.id ? "#eff6ff" : "#f8fafc",
                       border:
                         selectedMethod === method.id
-                          ? "2px solid #1d4ed8"
+                          ? "2px solid #0B0B60"
                           : "2px solid #e2e8f0",
                       color:
-                        selectedMethod === method.id ? "#1d4ed8" : "#6b7280",
+                        selectedMethod === method.id ? "#0B0B60" : "#6b7280",
                     }}
                   >
                     {method.icon}
@@ -481,7 +481,7 @@ export default function PaymentModal({
               disabled={isPaying}
               className="w-full font-bold text-base h-12"
               style={{
-                backgroundColor: "#1d4ed8",
+                backgroundColor: "#0B0B60",
                 color: "#fff",
                 borderRadius: "4px",
               }}

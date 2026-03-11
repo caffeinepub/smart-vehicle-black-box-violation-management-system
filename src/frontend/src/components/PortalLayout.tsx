@@ -48,8 +48,8 @@ export default function PortalLayout({ children }: PortalLayoutProps) {
       <header
         className="text-white shadow-lg"
         style={{
-          background: "linear-gradient(90deg, #1e3a8a, #1d4ed8)",
-          borderBottom: "3px solid #1e3a8a",
+          background: "linear-gradient(90deg, #0B0B60, #0B0B60)",
+          borderBottom: "3px solid #0B0B60",
         }}
       >
         <div className="container mx-auto px-4 py-4">

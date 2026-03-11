@@ -339,7 +339,7 @@ export default function ChallanPreviewModal({
         margin: "0 auto",
         background: "#fff",
         color: "#1f2937",
-        border: "2px solid #1d4ed8",
+        border: "2px solid #0B0B60",
         borderRadius: "4px",
       }}
     >
@@ -347,7 +347,7 @@ export default function ChallanPreviewModal({
       <div
         style={{
           background: "#fff",
-          borderBottom: "3px solid #1d4ed8",
+          borderBottom: "3px solid #0B0B60",
           padding: "0",
         }}
       >
@@ -366,7 +366,7 @@ export default function ChallanPreviewModal({
                 width: "64px",
                 height: "64px",
                 borderRadius: "50%",
-                border: "3px solid #1e40af",
+                border: "3px solid #0B0B60",
                 background: "linear-gradient(135deg, #dbeafe, #eff6ff)",
                 display: "flex",
                 flexDirection: "column",
@@ -380,7 +380,7 @@ export default function ChallanPreviewModal({
                 style={{
                   fontSize: "6px",
                   fontWeight: 900,
-                  color: "#1e3a8a",
+                  color: "#0B0B60",
                   textAlign: "center",
                   lineHeight: 1.3,
                 }}
@@ -391,7 +391,7 @@ export default function ChallanPreviewModal({
                 style={{
                   fontSize: "7px",
                   fontWeight: 900,
-                  color: "#1e40af",
+                  color: "#0B0B60",
                   textAlign: "center",
                   lineHeight: 1.3,
                 }}
@@ -401,7 +401,7 @@ export default function ChallanPreviewModal({
               <span
                 style={{
                   fontSize: "5px",
-                  color: "#1d4ed8",
+                  color: "#0B0B60",
                   textAlign: "center",
                   lineHeight: 1.3,
                 }}
@@ -411,7 +411,7 @@ export default function ChallanPreviewModal({
               <span
                 style={{
                   fontSize: "5px",
-                  color: "#1e3a8a",
+                  color: "#0B0B60",
                   textAlign: "center",
                   lineHeight: 1.3,
                 }}
@@ -435,7 +435,7 @@ export default function ChallanPreviewModal({
                 style={{
                   fontSize: "20px",
                   fontWeight: 900,
-                  color: "#1e3a8a",
+                  color: "#0B0B60",
                   lineHeight: 1.1,
                 }}
               >
@@ -470,7 +470,7 @@ export default function ChallanPreviewModal({
               style={{
                 fontSize: "15px",
                 fontWeight: 900,
-                color: "#1d4ed8",
+                color: "#0B0B60",
                 letterSpacing: "-0.3px",
               }}
             >
@@ -496,7 +496,7 @@ export default function ChallanPreviewModal({
                 borderRadius: "3px",
                 fontSize: "10px",
                 fontWeight: 700,
-                color: "#1e3a8a",
+                color: "#0B0B60",
               }}
             >
               VERIFIED ✓
@@ -504,11 +504,11 @@ export default function ChallanPreviewModal({
           </div>
         </div>
 
-        <div style={{ borderTop: "2px solid #1d4ed8", margin: "0 24px" }} />
+        <div style={{ borderTop: "2px solid #0B0B60", margin: "0 24px" }} />
 
         <div
           style={{
-            background: "#1d4ed8",
+            background: "#0B0B60",
             color: "#fff",
             padding: "10px 24px",
             display: "flex",
@@ -646,7 +646,7 @@ export default function ChallanPreviewModal({
               label: "Vehicle Number",
               value: firstViolation.vehicleNo,
               mono: true,
-              highlight: "#1e3a8a",
+              highlight: "#0B0B60",
               large: true,
             },
             {
@@ -741,7 +741,7 @@ export default function ChallanPreviewModal({
                         textTransform: "uppercase",
                         letterSpacing: "0.05em",
                         color: "#374151",
-                        borderBottom: "2px solid #1d4ed8",
+                        borderBottom: "2px solid #0B0B60",
                         textAlign:
                           i === 0
                             ? "left"
@@ -828,7 +828,7 @@ export default function ChallanPreviewModal({
               <tr
                 style={{
                   backgroundColor: "#eff6ff",
-                  borderTop: "2px solid #1d4ed8",
+                  borderTop: "2px solid #0B0B60",
                 }}
               >
                 <td
@@ -979,7 +979,7 @@ export default function ChallanPreviewModal({
             style={{
               fontSize: "11px",
               fontWeight: 700,
-              color: "#1e40af",
+              color: "#0B0B60",
               textTransform: "uppercase",
               letterSpacing: "0.08em",
               marginBottom: "4px",
@@ -987,7 +987,7 @@ export default function ChallanPreviewModal({
           >
             Issuing Authority
           </div>
-          <div style={{ fontWeight: 700, color: "#1e40af", fontSize: "13px" }}>
+          <div style={{ fontWeight: 700, color: "#0B0B60", fontSize: "13px" }}>
             Kerala Motor Vehicle Department – Government of Kerala
           </div>
           <div style={{ fontSize: "11px", color: "#374151", marginTop: "2px" }}>
@@ -1066,7 +1066,7 @@ export default function ChallanPreviewModal({
             disabled={downloading}
             className="gap-2 font-bold"
             style={{
-              backgroundColor: "#1d4ed8",
+              backgroundColor: "#0B0B60",
               color: "#ffffff",
               borderRadius: "4px",
             }}

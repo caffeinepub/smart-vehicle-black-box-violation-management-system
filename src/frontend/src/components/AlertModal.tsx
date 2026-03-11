@@ -94,7 +94,7 @@ export default function AlertModal({
               <strong>Possible Accident / Collision</strong>
               <br />
               Vehicle Number:{" "}
-              <strong style={{ color: "#1e3a8a" }}>{vehicleNo}</strong>
+              <strong style={{ color: "#0B0B60" }}>{vehicleNo}</strong>
               <br />
               <br />
               Immediate driver safety check required.
@@ -104,7 +104,7 @@ export default function AlertModal({
           ) : (
             <>
               Vehicle Number:{" "}
-              <strong style={{ color: "#1e3a8a" }}>{vehicleNo}</strong>
+              <strong style={{ color: "#0B0B60" }}>{vehicleNo}</strong>
               <br />
               <br />
               Violation threshold exceeded.
@@ -134,7 +134,7 @@ export default function AlertModal({
               onClick={onViewChallan}
               data-ocid="alert.challan.primary_button"
               style={{
-                background: "#1e3a8a",
+                background: "#0B0B60",
                 color: "#fff",
                 border: "none",
                 borderRadius: 8,

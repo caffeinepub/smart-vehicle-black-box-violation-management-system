@@ -575,7 +575,7 @@ export default function DashboardPage() {
       <div
         className="pl-5 py-4 border-l-4 rounded-r-lg"
         style={{
-          borderLeftColor: "#1d4ed8",
+          borderLeftColor: "#0B0B60",
           backgroundColor: "rgba(22,163,74,0.05)",
         }}
       >
@@ -974,7 +974,7 @@ export default function DashboardPage() {
                       >
                         <TableCell
                           className="font-bold text-sm py-3 font-mono tracking-wide"
-                          style={{ color: "#1d4ed8" }}
+                          style={{ color: "#0B0B60" }}
                         >
                           {violation.vehicleNo}
                         </TableCell>
@@ -1231,7 +1231,7 @@ export default function DashboardPage() {
                   <div className="p-4 space-y-2">
                     <p
                       className="font-black text-base font-mono"
-                      style={{ color: "#1d4ed8" }}
+                      style={{ color: "#0B0B60" }}
                     >
                       {ev.vehicleNo}
                     </p>
