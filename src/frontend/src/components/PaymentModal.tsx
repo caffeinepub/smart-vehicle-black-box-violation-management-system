@@ -139,7 +139,7 @@ export default function PaymentModal({
         <div
           className="text-white px-6 py-5"
           style={{
-            background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+            background: "linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%)",
             borderBottom: "3px solid #1e40af",
           }}
         >
@@ -195,7 +195,7 @@ export default function PaymentModal({
                 </span>
                 <span
                   className="font-black font-mono tracking-wide"
-                  style={{ color: "#2563eb" }}
+                  style={{ color: "#1d4ed8" }}
                 >
                   {vehicleNo}
                 </span>
@@ -272,7 +272,7 @@ export default function PaymentModal({
                 <p className="text-xs" style={{ color: "#6b7280" }}>
                   Vehicle
                 </p>
-                <p className="font-bold font-mono" style={{ color: "#2563eb" }}>
+                <p className="font-bold font-mono" style={{ color: "#1d4ed8" }}>
                   {vehicleNo}
                 </p>
                 <p className="text-xs" style={{ color: "#6b7280" }}>
@@ -302,10 +302,10 @@ export default function PaymentModal({
                         selectedMethod === method.id ? "#eff6ff" : "#f8fafc",
                       border:
                         selectedMethod === method.id
-                          ? "2px solid #2563eb"
+                          ? "2px solid #1d4ed8"
                           : "2px solid #e2e8f0",
                       color:
-                        selectedMethod === method.id ? "#2563eb" : "#6b7280",
+                        selectedMethod === method.id ? "#1d4ed8" : "#6b7280",
                     }}
                   >
                     {method.icon}
@@ -481,7 +481,7 @@ export default function PaymentModal({
               disabled={isPaying}
               className="w-full font-bold text-base h-12"
               style={{
-                backgroundColor: "#2563eb",
+                backgroundColor: "#1d4ed8",
                 color: "#fff",
                 borderRadius: "4px",
               }}

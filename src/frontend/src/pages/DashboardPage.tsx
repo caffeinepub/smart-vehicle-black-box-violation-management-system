@@ -1,3 +1,4 @@
+import AlertModal, { type AlertModalType } from "@/components/AlertModal";
 import ChallanPreviewModal from "@/components/ChallanPreviewModal";
 import PaymentModal from "@/components/PaymentModal";
 import { showNotification } from "@/components/notifications/PopupNotifications";
@@ -17,6 +18,11 @@ import {
   fetchViolations,
   getViolationFine,
 } from "@/lib/api";
+import {
+  playAlarmSound,
+  playEmergencyAlarm,
+  playViolationBeep,
+} from "@/lib/sounds";
 import { normalizeImageUrl } from "@/lib/violations/images";
 import { Link } from "@tanstack/react-router";
 import {
@@ -281,6 +287,12 @@ export default function DashboardPage() {
 
   const previousViolationsRef = useRef<Set<string>>(new Set());
   const notifiedThresholdRef = useRef<boolean>(false);
+  const [alertModal, setAlertModal] = useState<{
+    type: AlertModalType;
+    vehicleNo: string;
+  } | null>(null);
+  const multipleAlertShownRef = useRef<boolean>(false);
+  const emergencyAlertShownIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
@@ -361,17 +373,46 @@ export default function DashboardPage() {
             const key = `${v.vehicleNo}-${v.timestamp}`;
             if (prev.some((p) => `${p.vehicleNo}-${p.timestamp}` === key))
               return prev;
-            const next = [v, ...prev];
-            const score12h = get12HourScore(next);
-            if (
-              score12h >= 5 &&
-              "Notification" in window &&
-              Notification.permission === "granted"
-            ) {
-              new Notification("SAFEWAY ALERT", {
-                body: "Multiple violations detected. Challan generated.",
-              });
+
+            // Sound: beep or emergency alarm
+            const vType = (v.violationType || "").toLowerCase();
+            if (vType.includes("accident") || vType.includes("collision")) {
+              playEmergencyAlarm();
+              const evKey = key;
+              if (!emergencyAlertShownIdsRef.current.has(evKey)) {
+                emergencyAlertShownIdsRef.current.add(evKey);
+                setAlertModal({ type: "emergency", vehicleNo: v.vehicleNo });
+              }
+              if (
+                "Notification" in window &&
+                Notification.permission === "granted"
+              ) {
+                new Notification("SAFEWAY EMERGENCY", {
+                  body: `Possible accident/collision detected for ${v.vehicleNo}`,
+                });
+              }
+            } else {
+              playViolationBeep();
             }
+
+            const next = [v, ...prev];
+            const totalScore12h = get12HourScore(next);
+
+            if (totalScore12h >= 5 && !multipleAlertShownRef.current) {
+              multipleAlertShownRef.current = true;
+              playAlarmSound();
+              setAlertModal({ type: "multiple", vehicleNo: v.vehicleNo });
+              if (
+                "Notification" in window &&
+                Notification.permission === "granted"
+              ) {
+                new Notification("SAFEWAY ALERT", {
+                  body: "Multiple violations detected. Challan generated.",
+                });
+              }
+            }
+            if (totalScore12h < 5) multipleAlertShownRef.current = false;
+
             return next;
           });
           setLastUpdated(new Date());
@@ -534,7 +575,7 @@ export default function DashboardPage() {
       <div
         className="pl-5 py-4 border-l-4 rounded-r-lg"
         style={{
-          borderLeftColor: "#2563eb",
+          borderLeftColor: "#1d4ed8",
           backgroundColor: "rgba(22,163,74,0.05)",
         }}
       >
@@ -933,7 +974,7 @@ export default function DashboardPage() {
                       >
                         <TableCell
                           className="font-bold text-sm py-3 font-mono tracking-wide"
-                          style={{ color: "#2563eb" }}
+                          style={{ color: "#1d4ed8" }}
                         >
                           {violation.vehicleNo}
                         </TableCell>
@@ -1190,7 +1231,7 @@ export default function DashboardPage() {
                   <div className="p-4 space-y-2">
                     <p
                       className="font-black text-base font-mono"
-                      style={{ color: "#2563eb" }}
+                      style={{ color: "#1d4ed8" }}
                     >
                       {ev.vehicleNo}
                     </p>
@@ -1386,6 +1427,22 @@ export default function DashboardPage() {
         }
         onPaymentSuccess={handlePaymentSuccess}
       />
+      {/* Alert Modal */}
+      {alertModal && (
+        <AlertModal
+          type={alertModal.type}
+          vehicleNo={alertModal.vehicleNo}
+          onClose={() => setAlertModal(null)}
+          onViewChallan={
+            alertModal.type === "multiple"
+              ? () => {
+                  setAlertModal(null);
+                  handleViewChallan(alertModal.vehicleNo);
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }

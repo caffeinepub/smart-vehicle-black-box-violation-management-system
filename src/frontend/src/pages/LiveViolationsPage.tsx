@@ -250,7 +250,7 @@ export default function LiveViolationsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="border-l-4 pl-6" style={{ borderLeftColor: "#2563eb" }}>
+        <div className="border-l-4 pl-6" style={{ borderLeftColor: "#1d4ed8" }}>
           <h1 className="text-2xl font-bold mb-1" style={{ color: "#1f2937" }}>
             Live Violation Monitoring
           </h1>
@@ -281,7 +281,7 @@ export default function LiveViolationsPage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <div className="border-l-4 pl-6" style={{ borderLeftColor: "#2563eb" }}>
+        <div className="border-l-4 pl-6" style={{ borderLeftColor: "#1d4ed8" }}>
           <h1 className="text-2xl font-bold mb-1" style={{ color: "#1f2937" }}>
             Live Violation Monitoring
           </h1>
@@ -319,7 +319,7 @@ export default function LiveViolationsPage() {
   return (
     <div className="space-y-5">
       {/* Page Header */}
-      <div className="border-l-4 pl-5" style={{ borderLeftColor: "#2563eb" }}>
+      <div className="border-l-4 pl-5" style={{ borderLeftColor: "#1d4ed8" }}>
         <h1 className="text-2xl font-bold mb-1" style={{ color: "#1f2937" }}>
           Live Violation Monitoring
         </h1>
@@ -503,7 +503,7 @@ export default function LiveViolationsPage() {
                       >
                         <TableCell
                           className="font-bold text-sm py-3 font-mono tracking-wide"
-                          style={{ color: "#2563eb" }}
+                          style={{ color: "#1d4ed8" }}
                         >
                           {violation.vehicleNo}
                         </TableCell>
