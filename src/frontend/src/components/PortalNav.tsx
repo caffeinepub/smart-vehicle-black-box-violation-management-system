@@ -36,8 +36,8 @@ export default function PortalNav() {
     <nav
       className="border-t"
       style={{
-        backgroundColor: "#082d6b",
-        borderColor: "rgba(255,255,255,0.12)",
+        backgroundColor: "#1d4ed8",
+        borderColor: "rgba(255,255,255,0.15)",
       }}
       aria-label="Main navigation"
     >
@@ -54,12 +54,12 @@ export default function PortalNav() {
                   className={`flex items-center gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-wider transition-all duration-150 border-b-2 ${
                     isActive
                       ? "border-white text-white"
-                      : "border-transparent hover:border-white/40 hover:text-white"
+                      : "border-transparent hover:border-white/40"
                   }`}
                   style={{
-                    color: isActive ? "#ffffff" : "#93c5fd",
+                    color: isActive ? "#ffffff" : "rgba(255,255,255,0.75)",
                     backgroundColor: isActive
-                      ? "rgba(255,255,255,0.08)"
+                      ? "rgba(255,255,255,0.15)"
                       : "transparent",
                   }}
                 >

@@ -209,13 +209,13 @@ export default function ChallanPreviewPage() {
             </div>
             <div className="flex-1">
               <p className="text-xs uppercase tracking-widest opacity-75 mb-0.5">
-                Government of India
+                Government of Kerala
               </p>
               <p className="font-bold text-2xl leading-tight">
                 Motor Vehicle Department
               </p>
               <p className="text-sm font-semibold" style={{ color: "#93c5fd" }}>
-                SAFeway Smart Enforcement System
+                Traffic Violation Challan
               </p>
             </div>
             <img
@@ -424,10 +424,10 @@ export default function ChallanPreviewPage() {
               Issuing Authority
             </p>
             <p className="font-semibold text-gray-800">
-              Motor Vehicle Department – Smart Monitoring Unit
+              SAFEWAY Smart Vehicle Blackbox Monitoring System
             </p>
             <p className="text-xs text-gray-500 italic mt-0.5">
-              Ministry of Road Transport &amp; Highways, Government of India
+              Reported to Kerala Motor Vehicle Department for action.
             </p>
           </div>
 
@@ -441,8 +441,7 @@ export default function ChallanPreviewPage() {
             </p>
             <p>
               Please pay the fine within 60 days to avoid additional penalties.
-              Payment can be made online through the Parivahan portal or at any
-              authorized RTO office.
+              Payment can be made online or at any authorized Kerala RTO office.
             </p>
           </div>
         </div>

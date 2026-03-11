@@ -6,10 +6,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
-import type { NodeViolation } from "@/lib/api";
+import { type NodeViolation, getViolationFine } from "@/lib/api";
 import { normalizeImageUrl } from "@/lib/violations/images";
-import { Download, FileText, Shield } from "lucide-react";
+import { Download } from "lucide-react";
+
+const DEFAULT_OWNER = "Mark";
+const DEFAULT_MOBILE = "+91 8520649127";
 
 interface ChallanPreviewModalProps {
   open: boolean;
@@ -22,17 +24,7 @@ interface ChallanPreviewModalProps {
   "data-ocid"?: string;
 }
 
-const FINE_AMOUNTS: Record<string, number> = {
-  Overspeeding: 2000,
-  "No Helmet": 1000,
-  "Red Light Violation": 1000,
-  "Wrong Side Driving": 5000,
-  "No Seatbelt": 1000,
-  "Mobile Usage": 1000,
-  "Drunk Driving": 10000,
-};
-
-function formatDateTime(timestamp: string | number): string {
+function formatDDMMYYYY(timestamp: string | number): string {
   if (!timestamp) return "—";
   let d = new Date(timestamp as string);
   if (Number.isNaN(d.getTime()) && typeof timestamp === "string") {
@@ -40,16 +32,20 @@ function formatDateTime(timestamp: string | number): string {
     if (!Number.isNaN(asNum)) d = new Date(asNum);
   }
   if (Number.isNaN(d.getTime())) return String(timestamp);
-  // Format: "09 Mar 2026, 2:30 PM"
-  const day = d.getDate().toString().padStart(2, "0");
-  const month = d.toLocaleString("en-IN", { month: "short" });
-  const year = d.getFullYear();
-  const time = d.toLocaleString("en-IN", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-  return `${day} ${month} ${year}, ${time}`;
+  const dd = d.getDate().toString().padStart(2, "0");
+  const mm = (d.getMonth() + 1).toString().padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const hh = d.getHours().toString().padStart(2, "0");
+  const min = d.getMinutes().toString().padStart(2, "0");
+  const ss = d.getSeconds().toString().padStart(2, "0");
+  return `${dd}-${mm}-${yyyy} ${hh}:${min}:${ss}`;
+}
+
+function formatIssueDateOnly(d: Date): string {
+  const dd = d.getDate().toString().padStart(2, "0");
+  const mm = (d.getMonth() + 1).toString().padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
 }
 
 interface GroupedViolation {
@@ -65,7 +61,7 @@ function groupViolationsByType(
   const map = new Map<string, GroupedViolation>();
   for (const v of violations) {
     const type = v.violationType;
-    const fine = v.fineAmount ?? FINE_AMOUNTS[type] ?? 1000;
+    const fine = getViolationFine(v);
     const existing = map.get(type);
     if (existing) {
       existing.count += 1;
@@ -95,7 +91,6 @@ export default function ChallanPreviewModal({
 }: ChallanPreviewModalProps) {
   if (violations.length === 0) return null;
 
-  // Filter to just the relevant vehicle's violations if vehicleNo is provided
   const relevantViolations = vehicleNo
     ? violations.filter((v) => v.vehicleNo === vehicleNo)
     : violations;
@@ -105,260 +100,460 @@ export default function ChallanPreviewModal({
     relevantViolations.find((v) => v.imageUrl) ?? firstViolation;
   const imageUrl = normalizeImageUrl(evidenceViolation?.imageUrl);
   const challanNo = `SMVB-${Date.now().toString().slice(-8)}`;
-  const issuedAt = formatDateTime(firstViolation.timestamp);
-
+  const issueDate = formatIssueDateOnly(new Date());
+  const violationDateTime = formatDDMMYYYY(firstViolation.timestamp);
+  const ownerName = firstViolation.ownerName || DEFAULT_OWNER;
+  const ownerMobile = firstViolation.mobile || DEFAULT_MOBILE;
   const grouped = groupViolationsByType(relevantViolations);
 
+  const location =
+    firstViolation.lat != null && firstViolation.lng != null
+      ? `${firstViolation.lat}, ${firstViolation.lng}`
+      : "Vehicle Monitoring System";
+
   const handleDownloadPDF = () => {
-    // Show print dialog — user can save as PDF
-    window.print();
+    const printDiv = document.getElementById("challan-print-content");
+    if (printDiv) {
+      printDiv.style.display = "block";
+      window.print();
+      setTimeout(() => {
+        printDiv.style.display = "none";
+      }, 500);
+    } else {
+      window.print();
+    }
   };
 
-  const thStyle: React.CSSProperties = {
-    padding: "8px 12px",
-    fontSize: "11px",
-    fontWeight: 700,
-    textTransform: "uppercase" as const,
-    letterSpacing: "1px",
-    color: "#1e3a6e",
-    borderBottom: "2px solid #bfdbfe",
-    textAlign: "left" as const,
-  };
-
-  const thCenterStyle: React.CSSProperties = {
-    ...thStyle,
-    textAlign: "center" as const,
-  };
-  const thRightStyle: React.CSSProperties = {
-    ...thStyle,
-    textAlign: "right" as const,
-  };
-
-  const printChallan = (
+  const challanContent = (
     <div
-      id="challan-print-content"
-      style={{ display: "none", fontFamily: "Plus Jakarta Sans, sans-serif" }}
+      style={{
+        fontFamily: "Arial, sans-serif",
+        maxWidth: "760px",
+        margin: "0 auto",
+        background: "#fff",
+        color: "#1f2937",
+        border: "2px solid #2563eb",
+        borderRadius: "4px",
+      }}
     >
+      {/* ── CHALLAN HEADER ── */}
       <div
         style={{
-          maxWidth: "800px",
-          margin: "0 auto",
           background: "#fff",
-          border: "2px solid #0B3D91",
+          borderBottom: "3px solid #2563eb",
+          padding: "0",
         }}
       >
-        {/* Print Header */}
+        {/* Top row: emblem + gov title | SAFEWAY info */}
         <div
           style={{
-            background: "linear-gradient(135deg, #082d6b 0%, #0B3D91 100%)",
-            color: "#fff",
-            padding: "24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "18px 24px 14px",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "16px",
-              marginBottom: "12px",
-            }}
-          >
-            {/* SAFEWAY Logo */}
-            <img
-              src="/assets/generated/safeway-logo-transparent.dim_200x200.png"
-              alt="SAFeway"
+          {/* Left: Kerala emblem + Dept name */}
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            {/* Text emblem */}
+            <div
               style={{
-                width: "56px",
-                height: "56px",
-                objectFit: "contain",
+                width: "64px",
+                height: "64px",
+                borderRadius: "50%",
+                border: "3px solid #1e40af",
+                background: "linear-gradient(135deg, #dbeafe, #eff6ff)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
                 flexShrink: 0,
               }}
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = "none";
-              }}
-            />
+              aria-label="Kerala Government Emblem"
+            >
+              <span
+                style={{
+                  fontSize: "6px",
+                  fontWeight: 900,
+                  color: "#1e3a8a",
+                  textAlign: "center",
+                  lineHeight: 1.3,
+                }}
+              >
+                GOVT.
+              </span>
+              <span
+                style={{
+                  fontSize: "7px",
+                  fontWeight: 900,
+                  color: "#1e40af",
+                  textAlign: "center",
+                  lineHeight: 1.3,
+                }}
+              >
+                KERALA
+              </span>
+              <span
+                style={{
+                  fontSize: "5px",
+                  color: "#2563eb",
+                  textAlign: "center",
+                  lineHeight: 1.3,
+                }}
+              >
+                ★★★
+              </span>
+              <span
+                style={{
+                  fontSize: "5px",
+                  color: "#1d4ed8",
+                  textAlign: "center",
+                  lineHeight: 1.3,
+                }}
+              >
+                MVD
+              </span>
+            </div>
             <div>
               <div
                 style={{
-                  fontSize: "11px",
-                  textTransform: "uppercase",
-                  letterSpacing: "2px",
-                  opacity: 0.75,
+                  fontSize: "10px",
+                  color: "#6b7280",
                   marginBottom: "2px",
+                  letterSpacing: "0.08em",
+                  fontWeight: 600,
                 }}
               >
-                Government of India
+                GOVERNMENT OF KERALA
               </div>
               <div
-                style={{ fontSize: "22px", fontWeight: 900, lineHeight: 1.1 }}
+                style={{
+                  fontSize: "20px",
+                  fontWeight: 900,
+                  color: "#1e3a8a",
+                  lineHeight: 1.1,
+                }}
               >
                 Motor Vehicle Department
               </div>
               <div
                 style={{
-                  fontSize: "13px",
-                  opacity: 0.85,
-                  fontWeight: 700,
-                  letterSpacing: "1px",
+                  fontSize: "11px",
+                  color: "#374151",
+                  marginTop: "3px",
+                  fontWeight: 600,
                 }}
               >
-                SAFeway Smart Enforcement System
+                Traffic Enforcement Division
               </div>
             </div>
           </div>
-          <div
-            style={{
-              borderTop: "1px solid rgba(255,255,255,0.25)",
-              paddingTop: "12px",
-              textAlign: "center",
-            }}
-          >
+
+          {/* Right: SAFEWAY reporter info */}
+          <div style={{ textAlign: "right" }}>
             <div
               style={{
-                fontSize: "20px",
-                fontWeight: 900,
-                textTransform: "uppercase",
-                letterSpacing: "3px",
+                fontSize: "10px",
+                color: "#9ca3af",
+                marginBottom: "3px",
+                fontWeight: 600,
               }}
             >
-              Traffic Violation Challan
+              VIOLATION REPORTED BY
             </div>
-            <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "4px" }}>
-              Challan No:{" "}
-              <span
-                style={{ fontFamily: "monospace", color: "#fff", opacity: 1 }}
-              >
-                {challanNo}
-              </span>{" "}
-              · Issue Date: {issuedAt}
+            <div
+              style={{
+                fontSize: "15px",
+                fontWeight: 900,
+                color: "#2563eb",
+                letterSpacing: "-0.3px",
+              }}
+            >
+              SAFEWAY
+            </div>
+            <div
+              style={{
+                fontSize: "10px",
+                color: "#374151",
+                marginTop: "1px",
+                fontWeight: 600,
+              }}
+            >
+              Smart Vehicle Blackbox Monitoring System
+            </div>
+            <div
+              style={{
+                marginTop: "6px",
+                display: "inline-block",
+                padding: "3px 10px",
+                background: "#dbeafe",
+                border: "1px solid #93c5fd",
+                borderRadius: "3px",
+                fontSize: "10px",
+                fontWeight: 700,
+                color: "#1d4ed8",
+              }}
+            >
+              VERIFIED ✓
             </div>
           </div>
         </div>
 
-        {/* Vehicle & Owner */}
+        {/* Divider line */}
+        <div style={{ borderTop: "2px solid #2563eb", margin: "0 24px" }} />
+
+        {/* Title bar */}
         <div
-          style={{ padding: "20px 24px", borderBottom: "1px solid #e5e7eb" }}
+          style={{
+            background: "#2563eb",
+            color: "#fff",
+            padding: "10px 24px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginTop: "0",
+          }}
         >
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "16px",
+              fontSize: "16px",
+              fontWeight: 900,
+              letterSpacing: "1.5px",
+              textTransform: "uppercase",
             }}
           >
-            <div>
-              <div
-                style={{
-                  fontSize: "10px",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "1.5px",
-                  color: "#9ca3af",
-                  marginBottom: "4px",
-                }}
-              >
-                Vehicle Number
-              </div>
-              <div
-                style={{
-                  fontSize: "24px",
-                  fontWeight: 900,
-                  fontFamily: "monospace",
-                  letterSpacing: "3px",
-                  color: "#0B3D91",
-                }}
-              >
-                {firstViolation.vehicleNo}
-              </div>
+            TRAFFIC VIOLATION CHALLAN
+          </div>
+          <div
+            style={{
+              fontSize: "10px",
+              color: "rgba(255,255,255,0.7)",
+              fontStyle: "italic",
+              marginTop: "2px",
+            }}
+          >
+            Generated via SAFEWAY Smart Vehicle Blackbox Monitoring System
+          </div>
+          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.8)" }}>
+            Challan No:{" "}
+            <span
+              style={{
+                fontFamily: "monospace",
+                color: "#fff",
+                fontWeight: 700,
+              }}
+            >
+              {challanNo}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Paid banner */}
+      {isPaid && (
+        <div
+          style={{
+            background: "#dcfce7",
+            borderBottom: "2px solid #86efac",
+            padding: "10px 24px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <span style={{ fontSize: "18px" }}>✓</span>
+          <span style={{ fontWeight: 700, color: "#166534", fontSize: "14px" }}>
+            CHALLAN PAID – STATUS: PAID
+          </span>
+        </div>
+      )}
+
+      {/* Challan body */}
+      <div style={{ padding: "20px 24px" }}>
+        {/* Dates row */}
+        <div
+          style={{
+            display: "flex",
+            gap: "24px",
+            marginBottom: "16px",
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: "4px",
+            padding: "12px 16px",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "10px",
+                fontWeight: 700,
+                color: "#6b7280",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                marginBottom: "3px",
+              }}
+            >
+              Challan Issue Date
             </div>
-            <div>
-              <div
-                style={{
-                  fontSize: "10px",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "1.5px",
-                  color: "#9ca3af",
-                  marginBottom: "4px",
-                }}
-              >
-                Issue Date &amp; Time
-              </div>
-              <div
-                style={{ fontSize: "14px", fontWeight: 600, color: "#1f2937" }}
-              >
-                {issuedAt}
-              </div>
+            <div
+              style={{
+                fontWeight: 700,
+                color: "#1f2937",
+                fontSize: "13px",
+                fontFamily: "monospace",
+              }}
+            >
+              {issueDate}
             </div>
-            <div>
-              <div
-                style={{
-                  fontSize: "10px",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "1.5px",
-                  color: "#9ca3af",
-                  marginBottom: "4px",
-                }}
-              >
-                Owner Name
-              </div>
-              <div
-                style={{ fontSize: "15px", fontWeight: 600, color: "#1f2937" }}
-              >
-                {firstViolation.ownerName || "N/A"}
-              </div>
+          </div>
+          <div style={{ borderLeft: "1px solid #bfdbfe", paddingLeft: "24px" }}>
+            <div
+              style={{
+                fontSize: "10px",
+                fontWeight: 700,
+                color: "#6b7280",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                marginBottom: "3px",
+              }}
+            >
+              Violation Date &amp; Time
             </div>
-            <div>
-              <div
-                style={{
-                  fontSize: "10px",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "1.5px",
-                  color: "#9ca3af",
-                  marginBottom: "4px",
-                }}
-              >
-                Mobile Number
-              </div>
-              <div
-                style={{
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  color: "#1f2937",
-                  fontFamily: "monospace",
-                }}
-              >
-                {firstViolation.mobile || "N/A"}
-              </div>
+            <div
+              style={{
+                fontWeight: 700,
+                color: "#dc2626",
+                fontSize: "13px",
+                fontFamily: "monospace",
+              }}
+            >
+              {violationDateTime}
             </div>
           </div>
         </div>
 
-        {/* Grouped Violations Table */}
+        {/* Vehicle & Owner info */}
         <div
-          style={{ padding: "20px 24px", borderBottom: "1px solid #e5e7eb" }}
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "12px",
+            marginBottom: "16px",
+          }}
         >
+          {[
+            {
+              label: "Vehicle Number",
+              value: firstViolation.vehicleNo,
+              mono: true,
+              highlight: "#1e3a8a",
+              large: true,
+            },
+            {
+              label: "Owner Name",
+              value: ownerName,
+              mono: false,
+              highlight: "#1f2937",
+              large: false,
+            },
+            {
+              label: "Owner Mobile",
+              value: ownerMobile,
+              mono: true,
+              highlight: "#374151",
+              large: false,
+            },
+            {
+              label: "Violation Location",
+              value: location,
+              mono: false,
+              highlight: "#374151",
+              large: false,
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              style={{
+                padding: "10px 12px",
+                background: "#f9fafb",
+                border: "1px solid #e5e7eb",
+                borderRadius: "4px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  color: "#6b7280",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: "3px",
+                }}
+              >
+                {item.label}
+              </div>
+              <div
+                style={{
+                  fontWeight: item.large ? 900 : 600,
+                  color: item.highlight,
+                  fontSize: item.large ? "18px" : "13px",
+                  fontFamily: item.mono ? "monospace" : "inherit",
+                  letterSpacing: item.large ? "2px" : "0",
+                }}
+              >
+                {item.value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Violations table */}
+        <div style={{ marginBottom: "16px" }}>
           <div
             style={{
               fontSize: "11px",
               fontWeight: 700,
+              color: "#374151",
               textTransform: "uppercase",
-              letterSpacing: "1.5px",
-              color: "#9ca3af",
-              marginBottom: "12px",
+              letterSpacing: "0.08em",
+              marginBottom: "8px",
             }}
           >
-            Violation Details (Grouped by Type)
+            Violation Details
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              border: "1px solid #e2e8f0",
+            }}
+          >
             <thead>
-              <tr style={{ background: "#eef2f9" }}>
-                <th style={thStyle}>Violation Type</th>
-                <th style={thCenterStyle}>Count</th>
-                <th style={thCenterStyle}>Total Score</th>
-                <th style={thRightStyle}>Fine</th>
+              <tr style={{ backgroundColor: "#f1f5f9" }}>
+                {["Violation Type", "Count", "Score", "Fine Amount"].map(
+                  (h, i) => (
+                    <th
+                      key={h}
+                      style={{
+                        padding: "9px 12px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        color: "#374151",
+                        borderBottom: "2px solid #2563eb",
+                        textAlign:
+                          i === 0
+                            ? "left"
+                            : i === 3
+                              ? "right"
+                              : ("center" as React.CSSProperties["textAlign"]),
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
@@ -366,14 +561,14 @@ export default function ChallanPreviewModal({
                 <tr
                   key={g.violationType}
                   style={{
-                    background: i % 2 === 0 ? "#fff" : "#f8faff",
-                    borderBottom: "1px solid #e5e7eb",
+                    backgroundColor: i % 2 === 0 ? "#fff" : "#fafafa",
+                    borderBottom: "1px solid #e2e8f0",
                   }}
                 >
                   <td
                     style={{
-                      padding: "10px 12px",
-                      fontSize: "14px",
+                      padding: "9px 12px",
+                      fontSize: "13px",
                       fontWeight: 600,
                       color: "#1f2937",
                     }}
@@ -382,41 +577,49 @@ export default function ChallanPreviewModal({
                   </td>
                   <td
                     style={{
-                      padding: "10px 12px",
+                      padding: "9px 12px",
                       textAlign: "center",
-                      fontSize: "14px",
+                      fontSize: "13px",
                       fontWeight: 700,
                       color: "#374151",
                     }}
                   >
                     {g.count}
                   </td>
-                  <td
-                    style={{
-                      padding: "10px 12px",
-                      textAlign: "center",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color:
-                        g.totalScore >= 5
-                          ? "#991b1b"
-                          : g.totalScore >= 3
-                            ? "#c2410c"
-                            : "#166534",
-                    }}
-                  >
-                    {g.totalScore}
+                  <td style={{ padding: "9px 12px", textAlign: "center" }}>
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        fontSize: "13px",
+                        padding: "2px 8px",
+                        borderRadius: "12px",
+                        backgroundColor:
+                          g.totalScore >= 5
+                            ? "#fee2e2"
+                            : g.totalScore >= 3
+                              ? "#fef3c7"
+                              : "#dcfce7",
+                        color:
+                          g.totalScore >= 5
+                            ? "#dc2626"
+                            : g.totalScore >= 3
+                              ? "#d97706"
+                              : "#16a34a",
+                      }}
+                    >
+                      {g.totalScore}
+                    </span>
                   </td>
                   <td
                     style={{
-                      padding: "10px 12px",
+                      padding: "9px 12px",
                       textAlign: "right",
-                      fontSize: "14px",
+                      fontSize: "13px",
                       fontWeight: 700,
                       color: "#dc2626",
                     }}
                   >
-                    ₹{g.totalFine}
+                    ₹{g.totalFine.toLocaleString("en-IN")}
                   </td>
                 </tr>
               ))}
@@ -424,8 +627,8 @@ export default function ChallanPreviewModal({
             <tfoot>
               <tr
                 style={{
-                  background: "#fff7ed",
-                  borderTop: "2px solid #fdba74",
+                  backgroundColor: "#eff6ff",
+                  borderTop: "2px solid #2563eb",
                 }}
               >
                 <td
@@ -436,29 +639,31 @@ export default function ChallanPreviewModal({
                     color: "#1f2937",
                   }}
                 >
-                  TOTAL
+                  TOTAL ({relevantViolations.length} violations)
                 </td>
                 <td
                   style={{
                     padding: "10px 12px",
                     textAlign: "center",
-                    fontSize: "13px",
                     fontWeight: 700,
                     color: "#374151",
                   }}
                 >
                   {relevantViolations.length}
                 </td>
-                <td
-                  style={{
-                    padding: "10px 12px",
-                    textAlign: "center",
-                    fontSize: "14px",
-                    fontWeight: 900,
-                    color: "#991b1b",
-                  }}
-                >
-                  {totalScore}
+                <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                  <span
+                    style={{
+                      fontWeight: 900,
+                      fontSize: "13px",
+                      padding: "2px 8px",
+                      borderRadius: "12px",
+                      backgroundColor: "#fee2e2",
+                      color: "#dc2626",
+                    }}
+                  >
+                    {totalScore}
+                  </span>
                 </td>
                 <td
                   style={{
@@ -469,25 +674,75 @@ export default function ChallanPreviewModal({
                     color: "#dc2626",
                   }}
                 >
-                  ₹{totalFine}
+                  ₹{totalFine.toLocaleString("en-IN")}
                 </td>
               </tr>
             </tfoot>
           </table>
         </div>
 
-        {/* Evidence Image */}
+        {/* Summary */}
+        <div
+          style={{
+            display: "flex",
+            gap: "16px",
+            marginBottom: "16px",
+            padding: "12px 16px",
+            background: "#fef9ee",
+            border: "1px solid #fde68a",
+            borderRadius: "4px",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "10px",
+                fontWeight: 700,
+                color: "#6b7280",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                marginBottom: "2px",
+              }}
+            >
+              Total Violations
+            </div>
+            <div
+              style={{ fontSize: "20px", fontWeight: 900, color: "#1f2937" }}
+            >
+              {relevantViolations.length}
+            </div>
+          </div>
+          <div style={{ borderLeft: "1px solid #fde68a", paddingLeft: "16px" }}>
+            <div
+              style={{
+                fontSize: "10px",
+                fontWeight: 700,
+                color: "#6b7280",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                marginBottom: "2px",
+              }}
+            >
+              Total Fine Amount
+            </div>
+            <div
+              style={{ fontSize: "20px", fontWeight: 900, color: "#dc2626" }}
+            >
+              ₹{totalFine.toLocaleString("en-IN")}
+            </div>
+          </div>
+        </div>
+
+        {/* Evidence */}
         {imageUrl && (
-          <div
-            style={{ padding: "20px 24px", borderBottom: "1px solid #e5e7eb" }}
-          >
+          <div style={{ marginBottom: "16px" }}>
             <div
               style={{
                 fontSize: "11px",
                 fontWeight: 700,
+                color: "#6b7280",
                 textTransform: "uppercase",
-                letterSpacing: "1.5px",
-                color: "#9ca3af",
+                letterSpacing: "0.08em",
                 marginBottom: "8px",
               }}
             >
@@ -495,69 +750,67 @@ export default function ChallanPreviewModal({
             </div>
             <img
               src={imageUrl}
-              alt="Violation evidence"
+              alt="Violation proof"
               style={{
-                maxWidth: "100%",
-                maxHeight: "220px",
-                height: "auto",
-                border: "2px solid #e5e7eb",
-                borderRadius: "4px",
+                width: "100%",
+                maxHeight: "180px",
                 objectFit: "cover",
+                border: "1px solid #e2e8f0",
+                borderRadius: "4px",
+              }}
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = "none";
               }}
             />
           </div>
         )}
 
-        {/* Authority Footer */}
+        {/* Authority */}
         <div
           style={{
-            padding: "16px 24px",
             background: "#eff6ff",
-            borderTop: "1px solid #bfdbfe",
+            border: "1px solid #bfdbfe",
+            borderRadius: "4px",
+            padding: "12px 16px",
+            marginBottom: "12px",
           }}
         >
           <div
             style={{
               fontSize: "11px",
               fontWeight: 700,
+              color: "#1e40af",
               textTransform: "uppercase",
-              letterSpacing: "1.5px",
-              color: "#0B3D91",
+              letterSpacing: "0.08em",
               marginBottom: "4px",
             }}
           >
             Issuing Authority
           </div>
-          <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e3a6e" }}>
-            Motor Vehicle Department – SAFeway Smart Monitoring Unit
+          <div style={{ fontWeight: 700, color: "#1e40af", fontSize: "13px" }}>
+            Kerala Motor Vehicle Department – Government of Kerala
           </div>
-          <div style={{ fontSize: "11px", color: "#6b7280", marginTop: "4px" }}>
-            Ministry of Road Transport &amp; Highways, Government of India
+          <div style={{ fontSize: "11px", color: "#374151", marginTop: "2px" }}>
+            Traffic Enforcement Division
           </div>
-          <div
-            style={{
-              fontSize: "11px",
-              color: "#6b7280",
-              marginTop: "8px",
-              borderTop: "1px solid #bfdbfe",
-              paddingTop: "8px",
-            }}
-          >
-            NOTICE: Please pay the fine within 60 days to avoid additional
-            penalties and legal action. Payment can be made at any authorized
-            RTO office or via the Parivahan portal (parivahan.gov.in).
-          </div>
-          <div
-            style={{
-              fontSize: "10px",
-              color: "#9ca3af",
-              marginTop: "6px",
-              fontStyle: "italic",
-            }}
-          >
-            Challan No: {challanNo} · Generated: {issuedAt} · Status:{" "}
-            {isPaid ? "PAID" : "PENDING"}
-          </div>
+        </div>
+
+        {/* Footer notice */}
+        <div
+          style={{
+            background: "#f9fafb",
+            border: "1px solid #e2e8f0",
+            borderRadius: "4px",
+            padding: "10px 14px",
+            fontSize: "11px",
+            color: "#374151",
+            textAlign: "center",
+          }}
+        >
+          This challan is generated through the{" "}
+          <strong>SAFEWAY Smart Vehicle Blackbox Monitoring System</strong> and
+          reported to the <strong>Kerala Motor Vehicle Department</strong> for
+          further action.
         </div>
       </div>
     </div>
@@ -565,343 +818,67 @@ export default function ChallanPreviewModal({
 
   return (
     <>
-      {/* Hidden challan content for print */}
-      {printChallan}
+      {/* Hidden print content */}
+      <div id="challan-print-content" style={{ display: "none" }}>
+        {challanContent}
+      </div>
 
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           data-ocid="violations.challan_modal.dialog"
-          className="max-w-2xl max-h-[90vh] overflow-y-auto p-0"
-          style={{ borderRadius: "6px" }}
+          className="max-w-3xl max-h-[90vh] overflow-y-auto p-0"
+          style={{
+            backgroundColor: "#ffffff",
+            border: "1px solid #e2e8f0",
+            borderRadius: "8px",
+          }}
         >
-          <DialogHeader className="sr-only">
-            <DialogTitle className="flex items-center gap-2 text-xl">
-              <FileText className="w-6 h-6" style={{ color: "#0B3D91" }} />
+          <DialogHeader className="px-6 pt-5 pb-2">
+            <DialogTitle
+              style={{ color: "#1f2937", fontSize: "16px", fontWeight: 800 }}
+            >
               Traffic Violation Challan
             </DialogTitle>
+            <p style={{ color: "#6b7280", fontSize: "12px" }}>
+              Challan No:{" "}
+              <span style={{ fontFamily: "monospace", color: "#374151" }}>
+                {challanNo}
+              </span>
+            </p>
           </DialogHeader>
 
-          {/* Official Government Challan Header */}
-          <div
-            className="text-white p-5"
-            style={{
-              background: "linear-gradient(135deg, #082d6b 0%, #0B3D91 100%)",
-            }}
+          {/* Challan content rendered inline */}
+          <div className="px-6 pb-2">{challanContent}</div>
+
+          <DialogFooter
+            className="px-6 pb-5 gap-2 flex-wrap"
+            style={{ borderTop: "1px solid #e2e8f0", paddingTop: "12px" }}
           >
-            <div className="flex items-center gap-3 mb-3">
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
-              >
-                <Shield className="w-7 h-7 text-white" />
-              </div>
-              <div>
-                <p
-                  className="text-xs font-bold uppercase tracking-widest mb-0.5"
-                  style={{ color: "#93c5fd" }}
-                >
-                  Government of India
-                </p>
-                <p className="font-extrabold text-lg leading-tight text-white">
-                  Motor Vehicle Department
-                </p>
-                <p
-                  className="text-xs font-semibold"
-                  style={{ color: "#93c5fd" }}
-                >
-                  SAFeway Smart Enforcement System
-                </p>
-              </div>
-              {/* SAFeway logo */}
-              <img
-                src="/assets/generated/safeway-logo-transparent.dim_200x200.png"
-                alt="SAFeway"
-                className="ml-auto w-12 h-12 object-contain opacity-90"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-            </div>
-            <div
-              className="border-t pt-3 text-center"
-              style={{ borderColor: "rgba(255,255,255,0.2)" }}
-            >
-              <p className="text-xl font-extrabold uppercase tracking-widest text-white">
-                Traffic Violation Challan
-              </p>
-              <p className="text-xs mt-1" style={{ color: "#93c5fd" }}>
-                Challan No:{" "}
-                <span className="font-mono text-white">{challanNo}</span> ·
-                Issue Date: <span className="text-white">{issuedAt}</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Paid Banner */}
-          {isPaid && (
-            <div
-              className="flex items-center gap-3 px-6 py-3"
-              style={{
-                backgroundColor: "#dcfce7",
-                borderBottom: "2px solid #86efac",
-              }}
-              data-ocid="violations.challan_modal.success_state"
-            >
-              <span className="text-xl">✓</span>
-              <p className="font-bold text-sm" style={{ color: "#166534" }}>
-                Challan Paid Successfully — Status: PAID
-              </p>
-            </div>
-          )}
-
-          <div className="p-6 space-y-5">
-            {/* Vehicle & Owner Info */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p
-                  className="text-xs font-bold uppercase tracking-widest mb-1"
-                  style={{ color: "#9ca3af" }}
-                >
-                  Vehicle Number
-                </p>
-                <p
-                  className="font-black text-xl font-mono tracking-widest"
-                  style={{ color: "#0B3D91" }}
-                >
-                  {firstViolation.vehicleNo}
-                </p>
-              </div>
-              <div>
-                <p
-                  className="text-xs font-bold uppercase tracking-widest mb-1"
-                  style={{ color: "#9ca3af" }}
-                >
-                  Issue Date &amp; Time
-                </p>
-                <p className="font-semibold text-gray-800 text-sm">
-                  {issuedAt}
-                </p>
-              </div>
-              <div>
-                <p
-                  className="text-xs font-bold uppercase tracking-widest mb-1"
-                  style={{ color: "#9ca3af" }}
-                >
-                  Owner Name
-                </p>
-                <p className="font-semibold text-gray-800">
-                  {firstViolation.ownerName || "N/A"}
-                </p>
-              </div>
-              <div>
-                <p
-                  className="text-xs font-bold uppercase tracking-widest mb-1"
-                  style={{ color: "#9ca3af" }}
-                >
-                  Mobile Number
-                </p>
-                <p className="font-semibold text-gray-800 font-mono">
-                  {firstViolation.mobile || "N/A"}
-                </p>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Grouped Violations Table */}
-            <div>
-              <p
-                className="text-xs font-bold uppercase tracking-widest mb-3"
-                style={{ color: "#9ca3af" }}
-              >
-                Violation Details (Grouped by Type)
-              </p>
-              <div
-                className="overflow-hidden border rounded-lg"
-                style={{ borderColor: "#bfdbfe" }}
-              >
-                <table className="w-full">
-                  <thead>
-                    <tr style={{ backgroundColor: "#eef2f9" }}>
-                      {["Violation Type", "Count", "Score", "Fine"].map(
-                        (h, i) => (
-                          <th
-                            key={h}
-                            className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider ${i === 0 ? "text-left" : i === 3 ? "text-right" : "text-center"}`}
-                            style={{
-                              color: "#1e3a6e",
-                              borderBottom: "2px solid #bfdbfe",
-                            }}
-                          >
-                            {h}
-                          </th>
-                        ),
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {grouped.map((g, i) => (
-                      <tr
-                        key={g.violationType}
-                        style={{
-                          backgroundColor: i % 2 === 0 ? "#ffffff" : "#f8faff",
-                          borderBottom: "1px solid #e5e7eb",
-                        }}
-                      >
-                        <td className="px-4 py-2.5 text-sm font-semibold text-gray-900">
-                          {g.violationType}
-                        </td>
-                        <td className="px-4 py-2.5 text-center text-sm font-bold text-gray-700">
-                          {g.count}
-                        </td>
-                        <td className="px-4 py-2.5 text-center">
-                          <span
-                            className="font-bold text-sm px-2 py-0.5 rounded-full"
-                            style={{
-                              backgroundColor:
-                                g.totalScore >= 5
-                                  ? "#fee2e2"
-                                  : g.totalScore >= 3
-                                    ? "#fff7ed"
-                                    : "#dcfce7",
-                              color:
-                                g.totalScore >= 5
-                                  ? "#991b1b"
-                                  : g.totalScore >= 3
-                                    ? "#c2410c"
-                                    : "#166534",
-                            }}
-                          >
-                            {g.totalScore}
-                          </span>
-                        </td>
-                        <td
-                          className="px-4 py-2.5 text-right text-sm font-bold"
-                          style={{ color: "#dc2626" }}
-                        >
-                          ₹{g.totalFine}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr
-                      style={{
-                        backgroundColor: "#fff7ed",
-                        borderTop: "2px solid #fdba74",
-                      }}
-                    >
-                      <td className="px-4 py-3 text-sm font-bold text-gray-900">
-                        TOTAL ({relevantViolations.length} violations)
-                      </td>
-                      <td className="px-4 py-3 text-center text-sm font-bold text-gray-700">
-                        {relevantViolations.length}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span
-                          className="font-black text-sm px-2 py-0.5 rounded-full"
-                          style={{
-                            backgroundColor: "#fee2e2",
-                            color: "#991b1b",
-                          }}
-                        >
-                          {totalScore}
-                        </span>
-                      </td>
-                      <td
-                        className="px-4 py-3 text-right text-xl font-extrabold"
-                        style={{ color: "#dc2626" }}
-                      >
-                        ₹{totalFine}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-
-            {/* Evidence Image */}
-            {imageUrl && (
-              <div>
-                <p
-                  className="text-xs font-bold uppercase tracking-widest mb-2"
-                  style={{ color: "#9ca3af" }}
-                >
-                  Violation Evidence
-                </p>
-                <img
-                  src={imageUrl}
-                  alt="Violation proof"
-                  className="w-full h-auto max-h-48 object-cover border border-gray-300 rounded-lg"
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                />
-              </div>
-            )}
-
-            {/* Issuing Authority */}
-            <div
-              className="rounded-lg p-4"
-              style={{
-                backgroundColor: "#eff6ff",
-                border: "1px solid #bfdbfe",
-              }}
-            >
-              <p
-                className="text-xs font-bold uppercase tracking-widest mb-1"
-                style={{ color: "#0B3D91" }}
-              >
-                Issuing Authority
-              </p>
-              <p className="font-semibold text-gray-800 text-sm">
-                Motor Vehicle Department – SAFeway Smart Monitoring Unit
-              </p>
-              <p className="text-xs italic mt-0.5" style={{ color: "#6b7280" }}>
-                Ministry of Road Transport &amp; Highways, Government of India
-              </p>
-            </div>
-
-            {/* Authority Notice */}
-            <div
-              className="text-xs rounded-lg p-3"
-              style={{
-                backgroundColor: "#fefce8",
-                border: "1px solid #fde68a",
-                color: "#713f12",
-              }}
-            >
-              <p className="font-bold mb-1">NOTICE TO VEHICLE OWNER:</p>
-              <p>
-                Please pay the fine within 60 days to avoid additional penalties
-                and legal proceedings. Payment can be made online through the
-                Parivahan portal (parivahan.gov.in) or at any authorized RTO
-                office. Failure to pay may result in suspension of vehicle
-                registration.
-              </p>
-            </div>
-          </div>
-
-          <DialogFooter className="px-6 pb-5 gap-2 flex-wrap">
             <Button
               variant="outline"
               data-ocid="violations.challan_modal.close_button"
               onClick={() => onOpenChange(false)}
-              style={{ borderRadius: "3px" }}
+              style={{
+                borderColor: "#e2e8f0",
+                color: "#374151",
+                backgroundColor: "transparent",
+                borderRadius: "4px",
+              }}
             >
               Close
             </Button>
             <Button
               data-ocid="violations.challan_modal.download_button"
               onClick={handleDownloadPDF}
-              className="gap-2 text-white"
+              className="gap-2 font-bold"
               style={{
-                backgroundColor: "#0B3D91",
-                borderRadius: "3px",
+                backgroundColor: "#2563eb",
+                color: "#ffffff",
+                borderRadius: "4px",
               }}
             >
               <Download className="w-4 h-4" />
-              Download PDF
+              Download Challan
             </Button>
           </DialogFooter>
         </DialogContent>

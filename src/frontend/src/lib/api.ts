@@ -7,6 +7,7 @@ interface NodeViolation {
   violationType: string;
   timestamp: string | number;
   score: number;
+  fine?: number;
   fineAmount?: number;
   imageUrl?: string;
   lat?: number;
@@ -17,6 +18,28 @@ export type { NodeViolation };
 
 export function getViolationId(v: NodeViolation): string {
   return v._id || v.id || "";
+}
+
+/** Returns the fine for a violation, checking backend `fine`, then `fineAmount`, then lookup table */
+const FINE_AMOUNTS: Record<string, number> = {
+  Overspeeding: 2000,
+  "No Helmet": 1000,
+  "Red Light Violation": 1000,
+  "Wrong Side Driving": 5000,
+  "No Seatbelt": 1000,
+  "Mobile Usage": 1000,
+  "Drunk Driving": 10000,
+  Seatbelt: 500,
+  "Door Open": 500,
+  "Harsh Braking": 1000,
+  "Alcohol Low": 3000,
+  "Alcohol High": 10000,
+  "Drowsy Driving": 5000,
+  "Harsh Driving": 2000,
+};
+
+export function getViolationFine(v: NodeViolation): number {
+  return v.fine ?? v.fineAmount ?? FINE_AMOUNTS[v.violationType] ?? 1000;
 }
 
 const API_BASE = "https://vehicle-blackbox-system-1.onrender.com";
@@ -60,7 +83,5 @@ export async function payViolation(id: string): Promise<void> {
 
 // Legacy function for ChallanManagementPage compatibility
 export async function fetchChallans() {
-  // Since the backend only provides violations, we return an empty array
-  // This page can be updated in the future when challan endpoint is available
   return [];
 }

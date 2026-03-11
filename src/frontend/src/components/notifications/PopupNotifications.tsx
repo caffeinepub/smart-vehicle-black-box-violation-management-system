@@ -111,42 +111,42 @@ export default function PopupNotifications() {
         let scoreLabel: string;
 
         if (isReport) {
-          headerBg = "#7f1d1d";
+          headerBg = "#dc2626";
           borderColor = "#ef4444";
-          bodyBg = "#450a0a";
-          scoreColor = "#fca5a5";
+          bodyBg = "#fee2e2";
+          scoreColor = "#dc2626";
           scoreBg = "rgba(239,68,68,0.2)";
           scoreLabel = "SEVERE";
         } else if (score !== undefined && score >= 5) {
-          headerBg = "#7f1d1d";
+          headerBg = "#dc2626";
           borderColor = "#ef4444";
-          bodyBg = "#450a0a";
-          scoreColor = "#fca5a5";
+          bodyBg = "#fee2e2";
+          scoreColor = "#dc2626";
           scoreBg = "rgba(239,68,68,0.25)";
           scoreLabel = "SEVERE";
         } else if (score === 3) {
-          headerBg = "#713f12";
+          headerBg = "#f97316";
           borderColor = "#ca8a04";
-          bodyBg = "#422006";
-          scoreColor = "#fde68a";
+          bodyBg = "#fff7ed";
+          scoreColor = "#d97706";
           scoreBg = "rgba(202,138,4,0.25)";
           scoreLabel = "WARNING";
         } else {
           // score === 1 or default
-          headerBg = "#14532d";
+          headerBg = "#16a34a";
           borderColor = "#16a34a";
-          bodyBg = "#052e16";
-          scoreColor = "#86efac";
+          bodyBg = "#f0fdf4";
+          scoreColor = "#16a34a";
           scoreBg = "rgba(22,163,74,0.25)";
           scoreLabel = "LOW RISK";
         }
 
         const badgeTextColor =
           isReport || (score !== undefined && score >= 5)
-            ? "#fca5a5"
+            ? "#dc2626"
             : score === 3
               ? "#fde68a"
-              : "#86efac";
+              : "#16a34a";
 
         const violationTypeBorderColor =
           isReport || (score !== undefined && score >= 5)
@@ -157,17 +157,17 @@ export default function PopupNotifications() {
 
         const messageColor =
           isReport || (score !== undefined && score >= 5)
-            ? "#fecaca"
+            ? "#991b1b"
             : score === 3
-              ? "#fef3c7"
-              : "#bbf7d0";
+              ? "#9a3412"
+              : "#15803d";
 
         const detailColor =
           isReport || (score !== undefined && score >= 5)
-            ? "rgba(252,165,165,0.7)"
+            ? "rgba(153,27,27,0.7)"
             : score === 3
-              ? "rgba(253,230,138,0.7)"
-              : "rgba(134,239,172,0.75)";
+              ? "rgba(154,52,18,0.7)"
+              : "rgba(21,128,61,0.7)";
 
         return (
           <div
@@ -197,7 +197,7 @@ export default function PopupNotifications() {
               )}
               <p
                 className="font-bold text-sm flex-1 leading-snug"
-                style={{ color: "#ffffff" }}
+                style={{ color: "#1f2937" }}
               >
                 {isReport
                   ? "⚠ Multiple Violations Alert"
@@ -218,7 +218,7 @@ export default function PopupNotifications() {
               {notification.vehicleNo && (
                 <p
                   className="font-black text-lg font-mono tracking-widest mb-1"
-                  style={{ color: "#ffffff" }}
+                  style={{ color: "#1f2937" }}
                 >
                   {notification.vehicleNo}
                 </p>
@@ -257,7 +257,7 @@ export default function PopupNotifications() {
                 notification.fine !== null && (
                   <p
                     className="text-sm font-bold mb-1.5"
-                    style={{ color: "#fcd34d" }}
+                    style={{ color: "#d97706" }}
                   >
                     Fine: ₹{notification.fine}
                   </p>
