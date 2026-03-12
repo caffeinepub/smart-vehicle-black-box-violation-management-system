@@ -104,7 +104,7 @@ async function downloadChallanPDF(
   const challanNo = `SMVB-${Date.now().toString().slice(-8)}`;
   doc.text(`Challan No: ${challanNo}`, pageW / 2, 28, { align: "center" });
   doc.text(
-    "Generated via SAFEWAY Smart Vehicle Blackbox Monitoring System",
+    "Generated via SafeDrive Intelligent Traffic Monitoring System",
     pageW / 2,
     34,
     { align: "center" },
@@ -288,7 +288,7 @@ async function downloadChallanPDF(
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
   doc.text(
-    "This challan is generated via SAFEWAY Smart Vehicle Blackbox Monitoring System and reported to Kerala MVD.",
+    "This challan is generated via SafeDrive Intelligent Traffic Monitoring System and reported to Kerala MVD.",
     pageW / 2,
     y + 6,
     { align: "center" },
@@ -341,7 +341,7 @@ export default function ChallanPreviewPage() {
     setDownloadingVehicle(g.vehicleNo);
     try {
       const evidenceViol =
-        g.violations.find((v) => v.imageUrl) ?? g.violations[0];
+        [...g.violations].reverse().find((v) => v.imageUrl) ?? g.violations[0];
       const evidenceImgUrl = normalizeImageUrl(evidenceViol?.imageUrl);
       await downloadChallanPDF(
         g.vehicleNo,
@@ -446,7 +446,7 @@ export default function ChallanPreviewPage() {
       {challanGroups.map((g) => {
         const firstViolation = g.violations[0];
         const evidenceViolation =
-          g.violations.find((v) => v.imageUrl) ?? firstViolation;
+          [...g.violations].reverse().find((v) => v.imageUrl) ?? firstViolation;
         const imageUrl = normalizeImageUrl(evidenceViolation?.imageUrl);
         const challanNo = `SMVB-${g.vehicleNo.replace(/\s/g, "")}`;
         const issuedAt = formatDateTime(firstViolation.timestamp);
@@ -493,35 +493,49 @@ export default function ChallanPreviewPage() {
                     "linear-gradient(135deg, #082d6b 0%, #0B3D91 100%)",
                 }}
               >
-                <div className="flex items-center gap-4 mb-4">
-                  <div
-                    className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
-                  >
-                    <Shield className="w-8 h-8 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs uppercase tracking-widest opacity-75 mb-0.5">
-                      Government of Kerala
-                    </p>
-                    <p className="font-bold text-2xl leading-tight">
-                      Motor Vehicle Department
-                    </p>
-                    <p
-                      className="text-sm font-semibold"
-                      style={{ color: "#93c5fd" }}
+                {/* Two-logo header: MVD left, SafeDrive right */}
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  {/* MVD Logo - Left */}
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <div
+                      className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 font-black text-lg"
+                      style={{
+                        backgroundColor: "#ffd700",
+                        color: "#082d6b",
+                        border: "3px solid rgba(255,255,255,0.4)",
+                      }}
                     >
-                      Traffic Violation Challan
-                    </p>
+                      MVD
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-widest opacity-75">
+                        Government of Kerala
+                      </p>
+                      <p className="font-bold text-base leading-tight">
+                        Motor Vehicle Department
+                      </p>
+                    </div>
                   </div>
-                  <img
-                    src="/assets/generated/safeway-logo-transparent.dim_200x200.png"
-                    alt="SAFeway"
-                    className="w-14 h-14 object-contain opacity-90"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                    }}
-                  />
+                  {/* SafeDrive Logo - Right */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="text-right">
+                      <p className="text-xs opacity-75">Reported by</p>
+                      <p
+                        className="font-bold text-sm"
+                        style={{ color: "#ffd700" }}
+                      >
+                        SafeDrive
+                      </p>
+                    </div>
+                    <img
+                      src="/assets/generated/safeway-logo-transparent.dim_200x200.png"
+                      alt="SafeDrive"
+                      className="w-14 h-14 object-contain opacity-90"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
+                  </div>
                 </div>
                 <div
                   className="border-t pt-4 text-center"
@@ -738,7 +752,7 @@ export default function ChallanPreviewPage() {
                     Issuing Authority
                   </p>
                   <p className="font-semibold text-gray-800">
-                    SAFEWAY Smart Vehicle Blackbox Monitoring System
+                    SafeDrive Intelligent Traffic Monitoring System
                   </p>
                   <p className="text-xs text-gray-500 italic mt-0.5">
                     Reported to Kerala Motor Vehicle Department for action.

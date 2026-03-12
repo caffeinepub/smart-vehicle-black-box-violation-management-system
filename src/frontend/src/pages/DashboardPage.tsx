@@ -52,6 +52,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import * as React from "react";
 import { useEffect, useRef, useState } from "react";
 
 // Score mapping
@@ -237,6 +238,17 @@ function CameraCard({
   startLabel?: string;
   viewLabel: string;
 }) {
+  const [status, setStatus] = React.useState<"loading" | "online" | "offline">(
+    "loading",
+  );
+  const imgRef = React.useRef<HTMLImageElement>(null);
+
+  React.useEffect(() => {
+    if (imgRef.current) {
+      imgRef.current.src = streamSrc;
+    }
+  }, [streamSrc]);
+
   return (
     <div
       className="rounded-xl overflow-hidden shadow-md"
@@ -244,66 +256,127 @@ function CameraCard({
     >
       {/* Header */}
       <div
-        className="px-4 py-2.5 flex items-center gap-2"
+        className="px-4 py-2.5 flex items-center justify-between gap-2"
         style={{ background: "#f1f5f9" }}
       >
-        <Camera className="w-4 h-4" style={{ color: "#6b7280" }} />
-        <span
-          className="font-bold text-xs uppercase tracking-widest"
-          style={{ color: "#374151" }}
-        >
-          {label}
-        </span>
+        <div className="flex items-center gap-2">
+          <Camera className="w-4 h-4" style={{ color: "#6b7280" }} />
+          <span
+            className="font-bold text-xs uppercase tracking-widest"
+            style={{ color: "#374151" }}
+          >
+            {label}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              backgroundColor:
+                status === "online"
+                  ? "#16a34a"
+                  : status === "offline"
+                    ? "#dc2626"
+                    : "#f59e0b",
+              display: "inline-block",
+            }}
+          />
+          <span style={{ fontSize: 10, color: "#6b7280" }}>
+            {status === "online"
+              ? "LIVE"
+              : status === "offline"
+                ? "OFFLINE"
+                : "CONNECTING..."}
+          </span>
+        </div>
       </div>
 
-      {/* Content area */}
+      {/* Stream area */}
       <div
-        className="flex flex-col items-center gap-4 px-6 py-8"
-        style={{ background: "#f8fafc" }}
+        style={{
+          position: "relative",
+          backgroundColor: "#111",
+          minHeight: 180,
+        }}
       >
-        <div className="flex flex-col items-center gap-2">
-          <Camera
-            className="w-10 h-10 opacity-20"
-            style={{ color: "#0B0B60" }}
-          />
-          <p className="text-sm text-center" style={{ color: "#6b7280" }}>
-            Live stream opens in a new tab for mobile compatibility.
-          </p>
-        </div>
+        <img
+          ref={imgRef}
+          alt={label}
+          style={{
+            width: "100%",
+            display: status === "offline" ? "none" : "block",
+          }}
+          onLoad={() => setStatus("online")}
+          onError={() => setStatus("offline")}
+        />
+        {status === "offline" && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            <Camera style={{ width: 32, height: 32, color: "#6b7280" }} />
+            <p
+              style={{
+                color: "#9ca3af",
+                fontSize: 13,
+                textAlign: "center",
+                padding: "0 16px",
+              }}
+            >
+              Camera temporarily unavailable
+            </p>
+          </div>
+        )}
+        {status === "loading" && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            <Camera style={{ width: 32, height: 32, color: "#6b7280" }} />
+            <p style={{ color: "#9ca3af", fontSize: 13 }}>
+              Connecting to camera...
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Footer actions */}
+      <div className="px-4 py-3" style={{ background: "#f8fafc" }}>
         <button
           data-ocid="camera.open_button"
           type="button"
           onClick={() => window.open(streamSrc, "_blank")}
           style={{
-            background: "#0B0B60",
-            color: "#ffffff",
-            border: "none",
-            borderRadius: "8px",
-            padding: "10px 22px",
-            fontSize: "13px",
-            fontWeight: 700,
+            fontSize: 12,
+            padding: "4px 12px",
+            border: "1px solid #0B0B60",
+            color: "#0B0B60",
+            borderRadius: 6,
+            background: "white",
             cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            transition: "opacity 0.2s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.opacity = "0.85";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.opacity = "1";
           }}
         >
           📷 {viewLabel}
         </button>
         <p
-          className="text-xs text-center"
-          style={{
-            color: "#6b7280",
-            marginTop: "4px",
-            fontStyle: "italic",
-          }}
+          className="text-xs"
+          style={{ color: "#9ca3af", marginTop: 6, fontStyle: "italic" }}
         >
           Camera accessible only when connected to the vehicle WiFi network.
         </p>

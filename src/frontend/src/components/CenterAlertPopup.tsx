@@ -15,13 +15,13 @@ const ALERT_CONFIG = {
   multipleViolation: {
     headerBg: "#dc2626",
     icon: AlertTriangle,
-    title: "⚠ MULTIPLE VIOLATIONS DETECTED",
+    title: "⚠ Multiple Violations Detected. Challan Generated.",
     lines: (vehicleNo?: string) =>
       [
         vehicleNo ? `Vehicle Number: ${vehicleNo}` : null,
         "Violation threshold exceeded.",
-        "Challan generated for this violation group.",
         "Vehicle flagged for monitoring.",
+        "Data forwarded to authorities.",
       ].filter(Boolean) as string[],
     showViewChallan: true,
   },

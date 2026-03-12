@@ -491,189 +491,235 @@ export default function LiveViolationsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedViolations.map((v, index) => {
-                    const imageUrl = normalizeImageUrl(v.imageUrl);
-                    const vehicleScore = vehicleScoreMap.get(v.vehicleNo) ?? 0;
-                    const isPaidVehicle = paidVehicles.has(v.vehicleNo);
-                    const showActions = vehicleScore >= 5;
-                    const inside = isInsideCamViolation(v.violationType);
-                    const rowNum = index + 1;
-                    const ownerName = v.ownerName || DEFAULT_OWNER;
+                  {(() => {
+                    const violationTypeCounts = sortedViolations.reduce(
+                      (acc, v) => {
+                        const key = `${v.vehicleNo}::${v.violationType}`;
+                        acc[key] = (acc[key] || 0) + 1;
+                        return acc;
+                      },
+                      {} as Record<string, number>,
+                    );
+                    return sortedViolations.map((v, index) => {
+                      const imageUrl = normalizeImageUrl(v.imageUrl);
+                      const vehicleScore =
+                        vehicleScoreMap.get(v.vehicleNo) ?? 0;
+                      const isPaidVehicle = paidVehicles.has(v.vehicleNo);
+                      const showActions = vehicleScore >= 5;
+                      const inside = isInsideCamViolation(v.violationType);
+                      const rowNum = index + 1;
+                      const ownerName = v.ownerName || DEFAULT_OWNER;
+                      const typeKey = `${v.vehicleNo}::${v.violationType}`;
+                      const isRepeated =
+                        (violationTypeCounts[typeKey] || 0) > 1;
+                      const isHighScore = vehicleScore >= 5;
 
-                    return (
-                      <TableRow
-                        key={`${v.vehicleNo}-${v.timestamp}-${index}`}
-                        data-ocid={`violations.row.${rowNum}`}
-                        className="border-b transition-colors"
-                        style={{
-                          backgroundColor:
-                            index % 2 === 0 ? "#ffffff" : "#fafafa",
-                          borderColor: "#e2e8f0",
-                        }}
-                        onMouseEnter={(e) => {
-                          (
-                            e.currentTarget as HTMLTableRowElement
-                          ).style.backgroundColor = "#f0f4ff";
-                        }}
-                        onMouseLeave={(e) => {
-                          (
-                            e.currentTarget as HTMLTableRowElement
-                          ).style.backgroundColor =
-                            index % 2 === 0 ? "#ffffff" : "#fafafa";
-                        }}
-                      >
-                        <TableCell
-                          className="py-3 text-xs font-mono"
-                          style={{ color: "#9ca3af" }}
+                      return (
+                        <TableRow
+                          key={`${v.vehicleNo}-${v.timestamp}-${index}`}
+                          data-ocid={`violations.row.${rowNum}`}
+                          className="border-b transition-colors"
+                          style={{
+                            backgroundColor: isHighScore
+                              ? "#fff5f5"
+                              : index % 2 === 0
+                                ? "#ffffff"
+                                : "#fafafa",
+                            borderColor: "#e2e8f0",
+                            borderLeft: isHighScore
+                              ? "3px solid #dc2626"
+                              : undefined,
+                          }}
+                          onMouseEnter={(e) => {
+                            (
+                              e.currentTarget as HTMLTableRowElement
+                            ).style.backgroundColor = isHighScore
+                              ? "#ffe4e4"
+                              : "#f0f4ff";
+                          }}
+                          onMouseLeave={(e) => {
+                            (
+                              e.currentTarget as HTMLTableRowElement
+                            ).style.backgroundColor = isHighScore
+                              ? "#fff5f5"
+                              : index % 2 === 0
+                                ? "#ffffff"
+                                : "#fafafa";
+                          }}
                         >
-                          {rowNum}
-                        </TableCell>
-                        <TableCell
-                          className="font-bold font-mono tracking-wide py-3"
-                          style={{ color: "#0B0B60" }}
-                        >
-                          {v.vehicleNo}
-                        </TableCell>
-                        <TableCell
-                          className="py-3 text-sm"
-                          style={{ color: "#374151" }}
-                        >
-                          <div className="font-medium">{ownerName}</div>
-                          <div className="text-xs" style={{ color: "#6b7280" }}>
-                            {v.mobile || DEFAULT_MOBILE}
-                          </div>
-                        </TableCell>
-                        <TableCell
-                          className="py-3 font-semibold text-sm"
-                          style={{ color: "#1f2937" }}
-                        >
-                          {v.violationType}
-                        </TableCell>
-                        <TableCell className="py-3">
-                          <span
-                            className="text-xs font-bold px-2 py-0.5 rounded"
-                            style={{
-                              backgroundColor: inside ? "#eff6ff" : "#f0fdf4",
-                              color: inside ? "#1d4ed8" : "#15803d",
-                              border: inside
-                                ? "1px solid #bfdbfe"
-                                : "1px solid #bbf7d0",
-                            }}
+                          <TableCell
+                            className="py-3 text-xs font-mono"
+                            style={{ color: "#9ca3af" }}
                           >
-                            {inside ? "Inside" : "Outside"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="py-3">
-                          <span
-                            className="font-black text-xs px-2.5 py-1 rounded-full"
-                            style={{
-                              backgroundColor:
-                                v.score >= 5
-                                  ? "#fee2e2"
-                                  : v.score >= 3
-                                    ? "#fff7ed"
-                                    : "#dcfce7",
-                              color:
-                                v.score >= 5
-                                  ? "#dc2626"
-                                  : v.score >= 3
-                                    ? "#d97706"
-                                    : "#16a34a",
-                            }}
+                            {rowNum}
+                          </TableCell>
+                          <TableCell
+                            className="font-bold font-mono tracking-wide py-3"
+                            style={{ color: "#0B0B60" }}
                           >
-                            {v.score}
-                          </span>
-                        </TableCell>
-                        <TableCell
-                          className="py-3 font-semibold text-sm"
-                          style={{ color: "#dc2626" }}
-                        >
-                          ₹{getViolationFine(v).toLocaleString("en-IN")}
-                        </TableCell>
-                        <TableCell
-                          className="py-3 text-xs font-mono whitespace-nowrap"
-                          style={{ color: "#374151" }}
-                        >
-                          {formatDateTime(v.timestamp)}
-                        </TableCell>
-                        <TableCell className="py-3">
-                          {imageUrl ? (
-                            <button
-                              type="button"
-                              onClick={() => setLightboxUrl(imageUrl)}
-                              className="block focus:outline-none"
-                              aria-label="View evidence"
+                            {v.vehicleNo}
+                          </TableCell>
+                          <TableCell
+                            className="py-3 text-sm"
+                            style={{ color: "#374151" }}
+                          >
+                            <div className="font-medium">{ownerName}</div>
+                            <div
+                              className="text-xs"
+                              style={{ color: "#6b7280" }}
                             >
-                              <img
-                                src={imageUrl}
-                                alt="Evidence"
-                                className="w-16 h-12 object-cover rounded cursor-zoom-in hover:opacity-80 transition"
-                                style={{ border: "1px solid #e2e8f0" }}
-                                onError={(e) => {
-                                  e.currentTarget.src =
-                                    'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="64" height="48"%3E%3Crect fill="%23f1f5f9" width="64" height="48"/%3E%3C/svg%3E';
-                                }}
-                              />
-                            </button>
-                          ) : (
+                              {v.mobile || DEFAULT_MOBILE}
+                            </div>
+                          </TableCell>
+                          <TableCell
+                            className="py-3 font-semibold text-sm"
+                            style={{ color: "#1f2937" }}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              {v.violationType}
+                              {isRepeated && (
+                                <span
+                                  title="Repeated violation"
+                                  style={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: "50%",
+                                    backgroundColor: "#dc2626",
+                                    display: "inline-block",
+                                    flexShrink: 0,
+                                  }}
+                                />
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-3">
                             <span
-                              className="text-xs italic"
-                              style={{ color: "#9ca3af" }}
+                              className="text-xs font-bold px-2 py-0.5 rounded"
+                              style={{
+                                backgroundColor: inside ? "#eff6ff" : "#f0fdf4",
+                                color: inside ? "#1d4ed8" : "#15803d",
+                                border: inside
+                                  ? "1px solid #bfdbfe"
+                                  : "1px solid #bbf7d0",
+                              }}
                             >
-                              No image
+                              {inside ? "Inside" : "Outside"}
                             </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="py-3">
-                          {getStatusBadge(vehicleScore, isPaidVehicle)}
-                        </TableCell>
-                        <TableCell className="py-3">
-                          {showActions ? (
-                            <div className="flex gap-1.5 flex-wrap">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                data-ocid={`violations.download_button.${rowNum}`}
-                                onClick={() => handleViewChallan(v.vehicleNo)}
-                                className="text-xs h-7 px-2 whitespace-nowrap"
-                                style={{
-                                  borderColor: "#16a34a",
-                                  color: "#16a34a",
-                                  borderRadius: "3px",
-                                }}
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <span
+                              className="font-black text-xs px-2.5 py-1 rounded-full"
+                              style={{
+                                backgroundColor:
+                                  v.score >= 5
+                                    ? "#fee2e2"
+                                    : v.score >= 3
+                                      ? "#fff7ed"
+                                      : "#dcfce7",
+                                color:
+                                  v.score >= 5
+                                    ? "#dc2626"
+                                    : v.score >= 3
+                                      ? "#d97706"
+                                      : "#16a34a",
+                              }}
+                            >
+                              {v.score}
+                            </span>
+                          </TableCell>
+                          <TableCell
+                            className="py-3 font-semibold text-sm"
+                            style={{ color: "#dc2626" }}
+                          >
+                            ₹{getViolationFine(v).toLocaleString("en-IN")}
+                          </TableCell>
+                          <TableCell
+                            className="py-3 text-xs font-mono whitespace-nowrap"
+                            style={{ color: "#374151" }}
+                          >
+                            {formatDateTime(v.timestamp)}
+                          </TableCell>
+                          <TableCell className="py-3">
+                            {imageUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => setLightboxUrl(imageUrl)}
+                                className="block focus:outline-none"
+                                aria-label="View evidence"
                               >
-                                <Download className="w-3 h-3 mr-1" />
-                                Challan
-                              </Button>
-                              {!isPaidVehicle && (
+                                <img
+                                  src={imageUrl}
+                                  alt="Evidence"
+                                  className="w-16 h-12 object-cover rounded cursor-zoom-in hover:opacity-80 transition"
+                                  style={{ border: "1px solid #e2e8f0" }}
+                                  onError={(e) => {
+                                    e.currentTarget.src =
+                                      'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="64" height="48"%3E%3Crect fill="%23f1f5f9" width="64" height="48"/%3E%3C/svg%3E';
+                                  }}
+                                />
+                              </button>
+                            ) : (
+                              <span
+                                className="text-xs italic"
+                                style={{ color: "#9ca3af" }}
+                              >
+                                No image
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="py-3">
+                            {getStatusBadge(vehicleScore, isPaidVehicle)}
+                          </TableCell>
+                          <TableCell className="py-3">
+                            {showActions ? (
+                              <div className="flex gap-1.5 flex-wrap">
                                 <Button
                                   size="sm"
-                                  data-ocid={`violations.pay_button.${rowNum}`}
-                                  onClick={() => handleOpenPayment(v.vehicleNo)}
+                                  variant="outline"
+                                  data-ocid={`violations.download_button.${rowNum}`}
+                                  onClick={() => handleViewChallan(v.vehicleNo)}
                                   className="text-xs h-7 px-2 whitespace-nowrap"
                                   style={{
-                                    backgroundColor: "#15803d",
-                                    color: "#ffffff",
+                                    borderColor: "#16a34a",
+                                    color: "#16a34a",
                                     borderRadius: "3px",
                                   }}
                                 >
-                                  <CreditCard className="w-3 h-3 mr-1" />
-                                  Pay Fine
+                                  <Download className="w-3 h-3 mr-1" />
+                                  Challan
                                 </Button>
-                              )}
-                            </div>
-                          ) : (
-                            <span
-                              className="text-xs italic"
-                              style={{ color: "#9ca3af" }}
-                            >
-                              —
-                            </span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                                {!isPaidVehicle && (
+                                  <Button
+                                    size="sm"
+                                    data-ocid={`violations.pay_button.${rowNum}`}
+                                    onClick={() =>
+                                      handleOpenPayment(v.vehicleNo)
+                                    }
+                                    className="text-xs h-7 px-2 whitespace-nowrap"
+                                    style={{
+                                      backgroundColor: "#15803d",
+                                      color: "#ffffff",
+                                      borderRadius: "3px",
+                                    }}
+                                  >
+                                    <CreditCard className="w-3 h-3 mr-1" />
+                                    Pay Fine
+                                  </Button>
+                                )}
+                              </div>
+                            ) : (
+                              <span
+                                className="text-xs italic"
+                                style={{ color: "#9ca3af" }}
+                              >
+                                —
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    });
+                  })()}
                 </TableBody>
               </Table>
             </div>
