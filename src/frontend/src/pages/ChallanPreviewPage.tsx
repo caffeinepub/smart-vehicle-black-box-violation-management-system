@@ -7,10 +7,11 @@ import {
 } from "@/lib/api";
 import { normalizeImageUrl } from "@/lib/violations/images";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Download, FileText, Shield } from "lucide-react";
+import { ArrowLeft, Download, FileText } from "lucide-react";
 import { useEffect, useState } from "react";
 
-function formatDateTime(timestamp: string | number): string {
+// Format dateTime/timestamp as "12 March 2026, 03:45 PM"
+function formatDateTime(timestamp: string | number | undefined): string {
   if (!timestamp) return "—";
   let d = new Date(timestamp as string);
   if (Number.isNaN(d.getTime()) && typeof timestamp === "string") {
@@ -19,13 +20,18 @@ function formatDateTime(timestamp: string | number): string {
   }
   if (Number.isNaN(d.getTime())) return String(timestamp);
   return d.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
+    day: "numeric",
+    month: "long",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,
   });
+}
+
+// Get date/time from violation, preferring dateTime field over timestamp
+function getViolationDateTime(v: NodeViolation): string {
+  return formatDateTime(v.dateTime || v.timestamp);
 }
 
 // Group violations by vehicle number
@@ -64,7 +70,6 @@ async function downloadChallanPDF(
   totalFine: number,
   evidenceImageUrl?: string,
 ) {
-  // Load jsPDF from CDN
   if (!(window as any).jspdf) {
     await new Promise<void>((resolve, reject) => {
       const script = document.createElement("script");
@@ -87,30 +92,53 @@ async function downloadChallanPDF(
   const margin = 16;
   let y = 0;
 
+  const isMultiple = violations.length > 1;
+  const challanTitle = isMultiple
+    ? "MULTIPLE VIOLATION CASE"
+    : "TRAFFIC VIOLATION CHALLAN";
+
   // Header background
-  doc.setFillColor(37, 99, 235);
-  doc.rect(0, 0, pageW, 38, "F");
+  doc.setFillColor(11, 11, 96);
+  doc.rect(0, 0, pageW, 44, "F");
+
+  // Try loading logo
+  try {
+    const logoData = await loadImageAsDataUrl("/logo.png");
+    if (logoData) {
+      doc.addImage(
+        logoData,
+        "PNG",
+        pageW / 2 - 10,
+        4,
+        20,
+        20,
+        undefined,
+        "MEDIUM",
+      );
+    }
+  } catch {
+    /* ignore */
+  }
 
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(10);
-  doc.text("GOVERNMENT OF KERALA – MOTOR VEHICLE DEPARTMENT", pageW / 2, 10, {
-    align: "center",
-  });
-  doc.setFontSize(16);
-  doc.setFont("helvetica", "bold");
-  doc.text("TRAFFIC VIOLATION CHALLAN", pageW / 2, 20, { align: "center" });
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  const challanNo = `SMVB-${Date.now().toString().slice(-8)}`;
-  doc.text(`Challan No: ${challanNo}`, pageW / 2, 28, { align: "center" });
-  doc.text(
-    "Generated via SafeDrive Intelligent Traffic Monitoring System",
-    pageW / 2,
-    34,
-    { align: "center" },
-  );
+  doc.text("GOVERNMENT OF KERALA – MOTOR VEHICLE DEPARTMENT", pageW / 2, 28, {
+    align: "center",
+  });
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "bold");
+  doc.text(challanTitle, pageW / 2, 36, { align: "center" });
 
-  y = 46;
+  y = 50;
+
+  // Challan number
+  const challanNo = `SMVB-${vehicleNo.replace(/\s/g, "")}`;
+  doc.setTextColor(107, 114, 128);
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Challan No: ${challanNo}`, margin, y);
+  y += 8;
 
   // Vehicle & Owner section
   doc.setTextColor(30, 58, 138);
@@ -120,7 +148,7 @@ async function downloadChallanPDF(
   y += 5;
 
   doc.setFillColor(239, 246, 255);
-  doc.roundedRect(margin, y, pageW - margin * 2, 28, 2, 2, "F");
+  doc.roundedRect(margin, y, pageW - margin * 2, 36, 2, 2, "F");
 
   const firstV = violations[0];
   doc.setTextColor(107, 114, 128);
@@ -144,18 +172,20 @@ async function downloadChallanPDF(
   doc.setTextColor(107, 114, 128);
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
-  doc.text("Issue Date", margin + 4, y + 22);
-  doc.text("Violation Date & Time", margin + 60, y + 22);
+  doc.text("Date & Time", margin + 4, y + 22);
+  doc.text("Location", margin + 60, y + 22);
 
   doc.setTextColor(31, 41, 55);
   doc.setFontSize(9);
-  const today = new Date();
-  const issueDate = `${today.getDate().toString().padStart(2, "0")}-${(today.getMonth() + 1).toString().padStart(2, "0")}-${today.getFullYear()}`;
-  doc.text(issueDate, margin + 4, y + 27);
-  doc.setTextColor(220, 38, 38);
-  doc.text(formatDateTime(firstV.timestamp), margin + 60, y + 27);
+  doc.text(getViolationDateTime(firstV), margin + 4, y + 29);
 
-  y += 36;
+  const locText =
+    firstV.lat !== undefined && firstV.lng !== undefined
+      ? `Lat: ${firstV.lat}, Lng: ${firstV.lng}`
+      : "Location not available";
+  doc.text(locText, margin + 60, y + 29);
+
+  y += 44;
 
   // Violations table header
   doc.setTextColor(30, 58, 138);
@@ -164,7 +194,6 @@ async function downloadChallanPDF(
   doc.text("VIOLATION DETAILS", margin, y);
   y += 5;
 
-  // Table header row
   doc.setFillColor(241, 245, 249);
   doc.rect(margin, y, pageW - margin * 2, 8, "F");
   doc.setDrawColor(37, 99, 235);
@@ -178,7 +207,6 @@ async function downloadChallanPDF(
   doc.text("Fine Amount", pageW - margin - 3, y + 5.5, { align: "right" });
   y += 8;
 
-  // Table rows
   for (let i = 0; i < violations.length; i++) {
     const v = violations[i];
     const fine = getViolationFine(v);
@@ -195,7 +223,7 @@ async function downloadChallanPDF(
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.text(v.violationType, margin + 3, y + 5.5);
-    doc.text(String(v.score), margin + 95, y + 5.5);
+    doc.text(String(v.score ?? 0), margin + 95, y + 5.5);
     doc.setTextColor(220, 38, 38);
     doc.setFont("helvetica", "bold");
     doc.text(`Rs.${fine.toLocaleString()}`, pageW - margin - 3, y + 5.5, {
@@ -213,7 +241,11 @@ async function downloadChallanPDF(
   doc.setTextColor(31, 41, 55);
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
-  doc.text(`TOTAL (${violations.length} violations)`, margin + 3, y + 6.5);
+  doc.text(
+    `TOTAL (${violations.length} violation${violations.length > 1 ? "s" : ""})`,
+    margin + 3,
+    y + 6.5,
+  );
   doc.text(String(totalScore), margin + 95, y + 6.5);
   doc.setTextColor(220, 38, 38);
   doc.text(`Rs.${totalFine.toLocaleString()}`, pageW - margin - 3, y + 6.5, {
@@ -225,7 +257,7 @@ async function downloadChallanPDF(
   doc.setTextColor(30, 58, 138);
   doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
-  doc.text("DRIVER EVIDENCE IMAGE", margin, y);
+  doc.text("PROOF IMAGE / EVIDENCE", margin, y);
   y += 5;
 
   if (evidenceImageUrl) {
@@ -233,7 +265,7 @@ async function downloadChallanPDF(
       const imgData = await loadImageAsDataUrl(evidenceImageUrl);
       if (imgData) {
         const imgW = pageW - margin * 2;
-        const imgH = 60;
+        const imgH = 55;
         doc.addImage(
           imgData,
           "JPEG",
@@ -283,20 +315,20 @@ async function downloadChallanPDF(
 
   // Footer
   doc.setFillColor(249, 250, 251);
-  doc.roundedRect(margin, y, pageW - margin * 2, 14, 2, 2, "F");
+  doc.roundedRect(margin, y, pageW - margin * 2, 18, 2, 2, "F");
   doc.setTextColor(107, 114, 128);
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
   doc.text(
-    "This challan is generated via SafeDrive Intelligent Traffic Monitoring System and reported to Kerala MVD.",
+    "Generated by SafeDrive Intelligent Traffic Monitoring System",
     pageW / 2,
     y + 6,
     { align: "center" },
   );
   doc.text(
-    "Please pay within 60 days to avoid additional penalties.",
+    "Cooperated with Kerala Motor Vehicle Department.",
     pageW / 2,
-    y + 11,
+    y + 12,
     { align: "center" },
   );
 
@@ -327,12 +359,11 @@ export default function ChallanPreviewPage() {
 
   const vehicleGroups = groupByVehicle(violations);
 
-  // Only vehicles with totalScore >= 5 get a challan
   const challanGroups = Array.from(vehicleGroups.entries())
     .map(([vehicleNo, viols]) => ({
       vehicleNo,
       violations: viols,
-      totalScore: viols.reduce((s, v) => s + v.score, 0),
+      totalScore: viols.reduce((s, v) => s + (v.score ?? 0), 0),
       totalFine: viols.reduce((s, v) => s + getViolationFine(v), 0),
     }))
     .filter((g) => g.totalScore >= 5);
@@ -342,13 +373,19 @@ export default function ChallanPreviewPage() {
     try {
       const evidenceViol =
         [...g.violations].reverse().find((v) => v.imageUrl) ?? g.violations[0];
-      const evidenceImgUrl = normalizeImageUrl(evidenceViol?.imageUrl);
+      const rawUrl = evidenceViol?.imageUrl;
+      // Build uploads URL: prefer backend path
+      const evidenceImgUrl = rawUrl
+        ? rawUrl.startsWith("http") || rawUrl.startsWith("/")
+          ? rawUrl
+          : `https://vehicle-blackbox-system-1.onrender.com/uploads/${rawUrl}`
+        : undefined;
       await downloadChallanPDF(
         g.vehicleNo,
         g.violations,
         g.totalScore,
         g.totalFine,
-        evidenceImgUrl || undefined,
+        evidenceImgUrl,
       );
     } finally {
       setDownloadingVehicle(null);
@@ -372,7 +409,7 @@ export default function ChallanPreviewPage() {
         >
           <div
             className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
-            style={{ borderColor: "#0B3D91", borderTopColor: "transparent" }}
+            style={{ borderColor: "#0B0B60", borderTopColor: "transparent" }}
           />
           <span className="font-medium">Loading challan data...</span>
         </div>
@@ -381,7 +418,7 @@ export default function ChallanPreviewPage() {
   }
 
   if (challanGroups.length === 0) {
-    const totalScore = violations.reduce((s, v) => s + v.score, 0);
+    const totalScore = violations.reduce((s, v) => s + (v.score ?? 0), 0);
     return (
       <div className="space-y-6 max-w-4xl mx-auto">
         <Button
@@ -402,16 +439,16 @@ export default function ChallanPreviewPage() {
           >
             <FileText
               className="w-8 h-8"
-              style={{ color: "#0B3D91", opacity: 0.5 }}
+              style={{ color: "#0B0B60", opacity: 0.5 }}
             />
           </div>
-          <h2 className="text-lg font-bold mb-2" style={{ color: "#0B3D91" }}>
+          <h2 className="text-lg font-bold mb-2" style={{ color: "#0B0B60" }}>
             No Challan Generated
           </h2>
           <p className="text-gray-500 text-sm max-w-md">
             No vehicle has crossed the violation threshold of <strong>5</strong>
             . Current total score is <strong>{totalScore}</strong>. Challan is
-            generated only when total score ≥ 5.
+            generated only when total score &ge; 5.
           </p>
           {totalScore > 0 && (
             <div
@@ -447,9 +484,20 @@ export default function ChallanPreviewPage() {
         const firstViolation = g.violations[0];
         const evidenceViolation =
           [...g.violations].reverse().find((v) => v.imageUrl) ?? firstViolation;
-        const imageUrl = normalizeImageUrl(evidenceViolation?.imageUrl);
+        const rawImageUrl = evidenceViolation?.imageUrl;
+        const imageUrl = rawImageUrl
+          ? rawImageUrl.startsWith("http") || rawImageUrl.startsWith("/")
+            ? rawImageUrl
+            : `https://vehicle-blackbox-system-1.onrender.com/uploads/${rawImageUrl}`
+          : "";
         const challanNo = `SMVB-${g.vehicleNo.replace(/\s/g, "")}`;
-        const issuedAt = formatDateTime(firstViolation.timestamp);
+        const isMultiple = g.violations.length > 1;
+
+        // Location from first violation
+        const locationText =
+          firstViolation.lat !== undefined && firstViolation.lng !== undefined
+            ? `Lat: ${firstViolation.lat}, Lng: ${firstViolation.lng}`
+            : "Location not available";
 
         return (
           <div
@@ -467,13 +515,15 @@ export default function ChallanPreviewPage() {
             >
               <span className="text-sm font-semibold text-gray-700">
                 Challan for{" "}
-                <span className="font-mono text-blue-700">{g.vehicleNo}</span>
+                <span className="font-mono" style={{ color: "#0B0B60" }}>
+                  {g.vehicleNo}
+                </span>
               </span>
               <Button
                 onClick={() => handleDownload(g)}
                 disabled={downloadingVehicle === g.vehicleNo}
                 className="gap-2 text-white"
-                style={{ borderRadius: "2px", backgroundColor: "#0B3D91" }}
+                style={{ borderRadius: "2px", backgroundColor: "#0B0B60" }}
                 data-ocid="challan.download_button"
               >
                 <Download className="w-4 h-4" />
@@ -490,18 +540,29 @@ export default function ChallanPreviewPage() {
                 className="text-white p-6"
                 style={{
                   background:
-                    "linear-gradient(135deg, #082d6b 0%, #0B3D91 100%)",
+                    "linear-gradient(135deg, #0B0B60 0%, #1e3a8a 100%)",
                 }}
               >
-                {/* Two-logo header: MVD left, SafeDrive right */}
+                {/* Logo centered at top */}
+                <div className="flex justify-center mb-3">
+                  <img
+                    src="/logo.png"
+                    alt="Kerala Motor Vehicle Department"
+                    className="h-20 w-auto object-contain"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                </div>
+
+                {/* Header branding row */}
                 <div className="flex items-center justify-between gap-4 mb-4">
-                  {/* MVD Logo - Left */}
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <div
-                      className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 font-black text-lg"
+                      className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 font-black text-sm"
                       style={{
                         backgroundColor: "#ffd700",
-                        color: "#082d6b",
+                        color: "#0B0B60",
                         border: "3px solid rgba(255,255,255,0.4)",
                       }}
                     >
@@ -516,7 +577,6 @@ export default function ChallanPreviewPage() {
                       </p>
                     </div>
                   </div>
-                  {/* SafeDrive Logo - Right */}
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <div className="text-right">
                       <p className="text-xs opacity-75">Reported by</p>
@@ -530,19 +590,23 @@ export default function ChallanPreviewPage() {
                     <img
                       src="/assets/generated/safeway-logo-transparent.dim_200x200.png"
                       alt="SafeDrive"
-                      className="w-14 h-14 object-contain opacity-90"
+                      className="w-12 h-12 object-contain opacity-90"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
                       }}
                     />
                   </div>
                 </div>
+
+                {/* Challan title */}
                 <div
                   className="border-t pt-4 text-center"
                   style={{ borderColor: "rgba(255,255,255,0.25)" }}
                 >
                   <p className="text-2xl font-bold uppercase tracking-widest">
-                    Traffic Violation Challan
+                    {isMultiple
+                      ? "MULTIPLE VIOLATION CASE"
+                      : "TRAFFIC VIOLATION CHALLAN"}
                   </p>
                   <p className="text-xs opacity-75 mt-1 font-mono">
                     Challan No: {challanNo}
@@ -559,7 +623,7 @@ export default function ChallanPreviewPage() {
                     </p>
                     <p
                       className="font-black text-2xl font-mono tracking-widest"
-                      style={{ color: "#0B3D91" }}
+                      style={{ color: "#0B0B60" }}
                     >
                       {g.vehicleNo}
                     </p>
@@ -568,7 +632,9 @@ export default function ChallanPreviewPage() {
                     <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">
                       Date &amp; Time
                     </p>
-                    <p className="font-semibold text-gray-800">{issuedAt}</p>
+                    <p className="font-semibold text-gray-800">
+                      {getViolationDateTime(firstViolation)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">
@@ -586,11 +652,19 @@ export default function ChallanPreviewPage() {
                       {firstViolation.mobile || "+91 8520649127"}
                     </p>
                   </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">
+                      Location
+                    </p>
+                    <p className="font-semibold text-gray-800">
+                      {locationText}
+                    </p>
+                  </div>
                 </div>
 
                 <Separator />
 
-                {/* Violations Table — one row per violation */}
+                {/* Violations Table */}
                 <div>
                   <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">
                     Violation Details
@@ -629,7 +703,7 @@ export default function ChallanPreviewPage() {
                           const fine = getViolationFine(v);
                           return (
                             <tr
-                              key={`row-${v.vehicleNo}-${v.timestamp}-${i}`}
+                              key={`row-${v.vehicleNo}-${v.timestamp || v.dateTime}-${i}`}
                               style={{
                                 backgroundColor:
                                   i % 2 === 0 ? "#ffffff" : "#f8faff",
@@ -644,27 +718,27 @@ export default function ChallanPreviewPage() {
                                   className="font-bold text-sm px-2.5 py-0.5 rounded-full"
                                   style={{
                                     backgroundColor:
-                                      v.score >= 5
+                                      (v.score ?? 0) >= 5
                                         ? "#fee2e2"
-                                        : v.score >= 3
+                                        : (v.score ?? 0) >= 3
                                           ? "#fff7ed"
                                           : "#dcfce7",
                                     color:
-                                      v.score >= 5
+                                      (v.score ?? 0) >= 5
                                         ? "#991b1b"
-                                        : v.score >= 3
+                                        : (v.score ?? 0) >= 3
                                           ? "#c2410c"
                                           : "#166534",
                                   }}
                                 >
-                                  {v.score}
+                                  {v.score ?? 0}
                                 </span>
                               </td>
                               <td
                                 className="px-4 py-3 text-right text-sm font-bold"
                                 style={{ color: "#dc2626" }}
                               >
-                                ₹{fine.toLocaleString()}
+                                &#8377;{fine.toLocaleString()}
                               </td>
                             </tr>
                           );
@@ -678,7 +752,8 @@ export default function ChallanPreviewPage() {
                           }}
                         >
                           <td className="px-4 py-3 font-bold text-gray-900">
-                            TOTAL ({g.violations.length} violations)
+                            TOTAL ({g.violations.length} violation
+                            {g.violations.length > 1 ? "s" : ""})
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span
@@ -695,7 +770,7 @@ export default function ChallanPreviewPage() {
                             className="px-4 py-3 text-right text-2xl font-extrabold"
                             style={{ color: "#dc2626" }}
                           >
-                            ₹{g.totalFine.toLocaleString()}
+                            &#8377;{g.totalFine.toLocaleString()}
                           </td>
                         </tr>
                       </tfoot>
@@ -703,10 +778,10 @@ export default function ChallanPreviewPage() {
                   </div>
                 </div>
 
-                {/* Driver Evidence Image */}
+                {/* Proof Image / Evidence */}
                 <div>
                   <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
-                    Driver Evidence Image
+                    Proof Image / Evidence
                   </p>
                   {imageUrl ? (
                     <div className="border-2 border-gray-200 rounded-lg overflow-hidden bg-black">
@@ -747,7 +822,7 @@ export default function ChallanPreviewPage() {
                 >
                   <p
                     className="text-xs font-bold uppercase tracking-widest mb-1"
-                    style={{ color: "#0B3D91" }}
+                    style={{ color: "#0B0B60" }}
                   >
                     Issuing Authority
                   </p>
@@ -755,7 +830,7 @@ export default function ChallanPreviewPage() {
                     SafeDrive Intelligent Traffic Monitoring System
                   </p>
                   <p className="text-xs text-gray-500 italic mt-0.5">
-                    Reported to Kerala Motor Vehicle Department for action.
+                    Cooperated with Kerala Motor Vehicle Department.
                   </p>
                 </div>
 
@@ -766,7 +841,7 @@ export default function ChallanPreviewPage() {
                 >
                   <p
                     className="font-semibold mb-1"
-                    style={{ color: "#0B3D91" }}
+                    style={{ color: "#0B0B60" }}
                   >
                     Payment Instructions:
                   </p>
@@ -775,6 +850,17 @@ export default function ChallanPreviewPage() {
                     penalties. Payment can be made online or at any authorized
                     Kerala RTO office.
                   </p>
+                </div>
+
+                {/* Footer */}
+                <div
+                  className="text-center py-4 border-t text-xs text-gray-400"
+                  style={{ borderColor: "#e5e7eb" }}
+                >
+                  <p>
+                    Generated by SafeDrive Intelligent Traffic Monitoring System
+                  </p>
+                  <p>Cooperated with Kerala Motor Vehicle Department.</p>
                 </div>
               </div>
             </div>

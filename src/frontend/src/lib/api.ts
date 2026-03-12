@@ -6,6 +6,7 @@ interface NodeViolation {
   mobile: string;
   violationType: string;
   timestamp: string | number;
+  dateTime?: string | number;
   score: number;
   fine?: number;
   fineAmount?: number;
