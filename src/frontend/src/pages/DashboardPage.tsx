@@ -19,6 +19,7 @@ import { useInterval } from "@/hooks/useInterval";
 import {
   type NodeViolation,
   fetchViolations,
+  fetchViolationsWithRetry,
   getViolationFine,
 } from "@/lib/api";
 import {
@@ -70,7 +71,7 @@ const VIOLATION_SCORE_MAP: Record<string, number> = {
 const DEFAULT_OWNER = "Mark";
 const DEFAULT_MOBILE = "+91 8520649127";
 
-function formatDateTime(timestamp: string | number): string {
+function formatDateTime(timestamp: string | number | undefined): string {
   if (!timestamp) return "—";
   let d = new Date(timestamp as string);
   if (Number.isNaN(d.getTime()) && typeof timestamp === "string") {
@@ -85,6 +86,11 @@ function formatDateTime(timestamp: string | number): string {
   const min = d.getMinutes().toString().padStart(2, "0");
   const ss = d.getSeconds().toString().padStart(2, "0");
   return `${dd}-${mm}-${yyyy} ${hh}:${min}:${ss}`;
+}
+
+function getViolationDateTime(v: NodeViolation): string {
+  const ts = (v as any).dateTime || v.timestamp;
+  return formatDateTime(ts as string | number);
 }
 
 function buildVehicleScoreMap(
@@ -232,21 +238,31 @@ function CameraCard({
   label,
   streamSrc,
   viewLabel,
+  openUrl,
 }: {
   label: string;
-  streamSrc: string;
+  streamSrc: string | null;
   startLabel?: string;
   viewLabel: string;
+  openUrl: string;
 }) {
-  const [status, setStatus] = React.useState<"loading" | "online" | "offline">(
-    "loading",
-  );
+  const [status, setStatus] = React.useState<
+    "waiting" | "loading" | "online" | "offline"
+  >("waiting");
   const imgRef = React.useRef<HTMLImageElement>(null);
 
   React.useEffect(() => {
-    if (imgRef.current) {
-      imgRef.current.src = streamSrc;
+    if (streamSrc) {
+      setStatus("loading");
+      if (imgRef.current) {
+        imgRef.current.src = streamSrc;
+      }
+      const timer = setTimeout(() => {
+        setStatus((prev) => (prev === "loading" ? "offline" : prev));
+      }, 5000);
+      return () => clearTimeout(timer);
     }
+    setStatus("waiting");
   }, [streamSrc]);
 
   return (
@@ -288,7 +304,9 @@ function CameraCard({
               ? "LIVE"
               : status === "offline"
                 ? "OFFLINE"
-                : "CONNECTING..."}
+                : status === "loading"
+                  ? "CONNECTING..."
+                  : "STANDBY"}
           </span>
         </div>
       </div>
@@ -303,15 +321,16 @@ function CameraCard({
       >
         <img
           ref={imgRef}
+          src={streamSrc || undefined}
           alt={label}
           style={{
             width: "100%",
-            display: status === "offline" ? "none" : "block",
+            display: status === "online" ? "block" : "none",
           }}
           onLoad={() => setStatus("online")}
           onError={() => setStatus("offline")}
         />
-        {status === "offline" && (
+        {(status === "offline" || status === "waiting") && (
           <div
             style={{
               position: "absolute",
@@ -332,7 +351,9 @@ function CameraCard({
                 padding: "0 16px",
               }}
             >
-              Camera temporarily unavailable
+              {status === "offline"
+                ? "Connect to vehicle WiFi to view camera"
+                : "Connect to vehicle WiFi to view camera"}
             </p>
           </div>
         )}
@@ -361,7 +382,7 @@ function CameraCard({
         <button
           data-ocid="camera.open_button"
           type="button"
-          onClick={() => window.open(streamSrc, "_blank")}
+          onClick={() => window.open(openUrl, "_blank")}
           style={{
             fontSize: 12,
             padding: "4px 12px",
@@ -388,6 +409,8 @@ function CameraCard({
 export default function DashboardPage() {
   const [violations, setViolations] = useState<NodeViolation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [challanModalOpen, setChallanModalOpen] = useState(false);
   const [challanVehicleNo, setChallanVehicleNo] = useState<string>("");
@@ -420,6 +443,16 @@ export default function DashboardPage() {
   const _emergencyAlertShownIdsRef = useRef<Set<string>>(new Set());
   const shownGroupAlertsRef = useRef<Set<string>>(new Set());
   const shownEmergencyAlertsRef = useRef<Set<string>>(new Set());
+  // Tracks the timestamp of the last violation we showed a popup for
+  // (prevents repeated popups on every 3s poll for the same latest record)
+  const lastSeenViolationTimeRef = useRef<string>("");
+  const [emergencyEvents, setEmergencyEvents] = useState<NodeViolation[]>([]);
+  // Camera stream URLs are opened in new tab only — no embedded stream
+  const _OUTSIDE_CAMERA_URL = "http://10.245.232.48/stream"; // kept for reference
+
+  // Camera streams are LOCAL (ESP on vehicle WiFi) — do not auto-load.
+  // Users open the stream in a new tab via the "View Camera" buttons below.
+  // insideCameraStreamUrl stays null → no embedded stream attempt.
 
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
@@ -429,6 +462,31 @@ export default function DashboardPage() {
 
   // Derived: violation groups
   const violationGroups = buildViolationGroups(violations, paidGroupIds);
+
+  const loadEmergencies = () => {
+    const API_BASE = "https://vehicle-blackbox-system-1.onrender.com";
+    fetch(`${API_BASE}/emergencies`)
+      .then((res) => res.json())
+      .then((arr: any[]) => {
+        const data: NodeViolation[] = arr.map((raw: any) => ({
+          vehicleNo: raw.vehicleNo || raw.vehicle || "",
+          violationType: raw.violationType || raw.type || "",
+          timestamp: raw.dateTime || raw.time || raw.timestamp || "",
+          dateTime: raw.dateTime || raw.time || raw.timestamp || "",
+          imageUrl:
+            raw.imageUrl || (raw.evidence ? `${raw.evidence}` : undefined),
+          score: Number(raw.score) || 0,
+          fine: raw.fine != null ? Number(raw.fine) : 0,
+          fineAmount: Number(raw.fine) || 0,
+          lat: raw.lat != null ? Number(raw.lat) : undefined,
+          lng: raw.lng != null ? Number(raw.lng) : undefined,
+          ownerName: raw.ownerName || raw.owner || "Mark",
+          mobile: raw.mobile || "+91 8520649127",
+        }));
+        setEmergencyEvents(data);
+      })
+      .catch(() => {});
+  };
 
   const loadData = () => {
     fetchViolations()
@@ -442,20 +500,26 @@ export default function DashboardPage() {
           previousViolationsRef.current.size > 0
         ) {
           for (const v of newViolations) {
-            showNotification(
-              "Traffic Violation Detected",
-              "alert",
-              `Detected at ${formatDateTime(v.timestamp)}`,
-              v.vehicleNo,
-              v.violationType,
-              v.score,
-              v.fineAmount,
-            );
+            const vTypeLower = (v.violationType || "").toLowerCase();
+            if (vTypeLower === "accident" || vTypeLower === "collision") {
+              // Emergency events — play alarm; popup handled by center alert logic below
+              playEmergencyAlarm();
+            } else {
+              showNotification(
+                "Traffic Violation Detected",
+                "alert",
+                `Detected at ${getViolationDateTime(v)}`,
+                v.vehicleNo,
+                v.violationType,
+                v.score,
+                v.fineAmount,
+              );
+            }
           }
         }
         const score12h = get12HourScore(data);
         if (
-          score12h >= 5 &&
+          score12h >= 3 &&
           !notifiedThresholdRef.current &&
           previousViolationsRef.current.size > 0
         ) {
@@ -469,25 +533,98 @@ export default function DashboardPage() {
             });
           }
         }
-        if (score12h < 5) notifiedThresholdRef.current = false;
+        if (score12h < 3) notifiedThresholdRef.current = false;
         const currentKeys = new Set(
           data.map((v) => `${v.vehicleNo}-${v.timestamp}`),
         );
         previousViolationsRef.current = currentKeys;
+
+        // --- Popup alert checks on latest violation (prevent repeated popups) ---
+        if (data.length > 0) {
+          const latest = data[data.length - 1];
+          const latestTime = String(latest.timestamp || latest.dateTime || "");
+          if (latestTime && latestTime !== lastSeenViolationTimeRef.current) {
+            lastSeenViolationTimeRef.current = latestTime;
+            const vType = (latest.violationType || "").toLowerCase();
+            if (vType === "accident") {
+              const key = `accident-${latestTime}`;
+              if (!shownEmergencyAlertsRef.current.has(key)) {
+                shownEmergencyAlertsRef.current.add(key);
+                playEmergencyAlarm();
+                setCenterAlert({
+                  type: "accident",
+                  vehicleNo: latest.vehicleNo,
+                });
+              }
+            } else if (vType === "collision") {
+              const key = `collision-${latestTime}`;
+              if (!shownEmergencyAlertsRef.current.has(key)) {
+                shownEmergencyAlertsRef.current.add(key);
+                playEmergencyAlarm();
+                setCenterAlert({
+                  type: "collision",
+                  vehicleNo: latest.vehicleNo,
+                });
+              }
+            } else if (data.length >= 3) {
+              const key = `multiple-${latestTime}`;
+              if (!shownGroupAlertsRef.current.has(key)) {
+                shownGroupAlertsRef.current.add(key);
+                playAlarmSound();
+                setCenterAlert({
+                  type: "multipleViolation",
+                  vehicleNo: latest.vehicleNo,
+                });
+              }
+            }
+          }
+        }
+        // -----------------------------------------------------------------------
+
         setViolations(data);
         setLastUpdated(new Date());
       })
-      .catch(() => setViolations([]))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        /* silent: keep existing data on polling failure */
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: loadData is stable
+  // Initial connection with automatic retry (Render cold-start can take 30s+)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run once
   useEffect(() => {
-    loadData();
+    let cancelled = false;
+    const connect = async () => {
+      try {
+        const data = await fetchViolationsWithRetry(10, 3000, (attempt) => {
+          if (!cancelled) {
+            setConnecting(true);
+            setRetryAttempt(attempt);
+          }
+        });
+        if (cancelled) return;
+        setViolations(data);
+        setLastUpdated(new Date());
+        loadEmergencies();
+      } finally {
+        if (!cancelled) {
+          setConnecting(false);
+          setRetryAttempt(0);
+          setLoading(false);
+        }
+      }
+    };
+    connect();
+    return () => {
+      cancelled = true;
+    };
   }, []);
   useInterval(() => {
     loadData();
-  }, 2000);
+    loadEmergencies();
+  }, 3000);
 
   // SSE
   useEffect(() => {
@@ -555,11 +692,11 @@ export default function DashboardPage() {
             }
 
             const totalScore12h = get12HourScore(next);
-            if (totalScore12h >= 5 && !multipleAlertShownRef.current) {
+            if (totalScore12h >= 3 && !multipleAlertShownRef.current) {
               multipleAlertShownRef.current = true;
               setAlertModal({ type: "multiple", vehicleNo: v.vehicleNo });
             }
-            if (totalScore12h < 5) multipleAlertShownRef.current = false;
+            if (totalScore12h < 3) multipleAlertShownRef.current = false;
 
             return next;
           });
@@ -594,32 +731,47 @@ export default function DashboardPage() {
   });
 
   const vehicleScoreMap = buildVehicleScoreMap(violations);
-  const totalViolations = violations.length;
-  const totalScore = violations.reduce((sum, v) => sum + v.score, 0);
-  const accidentCount = violations.filter((v) =>
-    v.violationType?.toLowerCase().includes("accident"),
-  ).length;
-  const totalFineCollected = violations.reduce(
-    (sum, v) => sum + getViolationFine(v),
+  const nonEmergencyViolations = violations.filter(
+    (v) =>
+      !v.violationType?.toLowerCase().includes("accident") &&
+      !v.violationType?.toLowerCase().includes("collision"),
+  );
+  const totalViolations = nonEmergencyViolations.length;
+  const totalScore = nonEmergencyViolations.reduce(
+    (sum, v) => sum + (Number(v.score) || 0),
     0,
   );
-  const uniqueVehicleNos = Array.from(
-    new Set(violations.map((v) => v.vehicleNo)),
-  );
-  const flaggedVehicles = uniqueVehicleNos.filter((vNo) =>
-    isVehicleFlagged(vNo, violations),
-  ).length;
-  const risk = getRiskLevel(totalScore);
-
-  const emergencyEvents = sortedViolations.filter(
+  const accidentCount = violations.filter(
     (v) =>
       v.violationType?.toLowerCase().includes("accident") ||
       v.violationType?.toLowerCase().includes("collision"),
+  ).length;
+  const totalFineCollected = nonEmergencyViolations.reduce(
+    (sum, v) => sum + (Number(getViolationFine(v)) || 0),
+    0,
+  );
+  const uniqueVehicleNos = Array.from(
+    new Set(nonEmergencyViolations.map((v) => v.vehicleNo)),
+  );
+  const flaggedVehicles = uniqueVehicleNos.filter((vNo) =>
+    isVehicleFlagged(vNo, nonEmergencyViolations),
+  ).length;
+  const risk = getRiskLevel(totalScore);
+
+  // emergencyEvents is fetched from /emergencies endpoint (see state above)
+
+  const tableViolations = sortedViolations.filter(
+    (v) =>
+      !v.violationType?.toLowerCase().includes("accident") &&
+      !v.violationType?.toLowerCase().includes("collision"),
   );
 
   const lastEventTime =
     violations.length > 0
-      ? formatDateTime(violations[violations.length - 1].timestamp)
+      ? formatDateTime(
+          (violations[violations.length - 1] as any).dateTime ||
+            violations[violations.length - 1].timestamp,
+        )
       : "No events yet";
 
   const CARD_BG = "#f8fafc";
@@ -646,7 +798,7 @@ export default function DashboardPage() {
       label: "Total Score",
       value: loading ? "—" : String(totalScore),
       icon: TrendingUp,
-      accent: totalScore >= 5 ? "#ef4444" : "#64748b",
+      accent: totalScore >= 3 ? "#ef4444" : "#64748b",
       ocid: "dashboard.total_score.card",
       to: "/analytics" as const,
     },
@@ -700,6 +852,47 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      {/* Alert sound element */}
+      {/* biome-ignore lint/a11y/useMediaCaption: alert sound has no captions needed */}
+      <audio
+        id="alertSound"
+        src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
+        preload="auto"
+        style={{ display: "none" }}
+      />
+      {/* Connecting to server banner */}
+      {connecting && (
+        <div
+          data-ocid="dashboard.connecting.card"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "12px 20px",
+            borderRadius: 10,
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            color: "#1d4ed8",
+            fontWeight: 600,
+            fontSize: 14,
+          }}
+        >
+          <Loader2
+            className="w-4 h-4 animate-spin"
+            style={{ color: "#1d4ed8" }}
+          />
+          <span>
+            Connecting to server… please wait
+            {retryAttempt > 0 && (
+              <span
+                style={{ fontWeight: 400, color: "#3b82f6", marginLeft: 8 }}
+              >
+                (attempt {retryAttempt} / 10)
+              </span>
+            )}
+          </span>
+        </div>
+      )}
       {/* Lightbox */}
       {lightboxUrl && (
         <div
@@ -789,13 +982,15 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <CameraCard
             label="Driver Camera (Inside Camera)"
-            streamSrc="http://10.96.26.69/stream"
+            streamSrc={null}
             viewLabel="View Driver Camera"
+            openUrl="http://10.154.76.206/stream"
           />
           <CameraCard
             label="Road Camera (Outside Camera)"
-            streamSrc="http://10.96.26.206/stream"
+            streamSrc={null}
             viewLabel="View Road Camera"
+            openUrl="http://10.245.232.48/stream"
           />
         </div>
       </section>
@@ -1045,7 +1240,7 @@ export default function DashboardPage() {
               style={{ color: "#6b7280" }}
             />
             <p className="text-sm" style={{ color: "#6b7280" }}>
-              No violation groups yet.
+              No violations yet.
             </p>
           </div>
         ) : (
@@ -1221,7 +1416,7 @@ export default function DashboardPage() {
                                 className="px-4 py-2 text-xs font-mono"
                                 style={{ color: "#374151" }}
                               >
-                                {formatDateTime(v.timestamp)}
+                                {getViolationDateTime(v)}
                               </td>
                               <td className="px-4 py-2">
                                 {imgUrl ? (
@@ -1411,7 +1606,7 @@ export default function DashboardPage() {
                 Connecting to enforcement network...
               </span>
             </div>
-          ) : sortedViolations.length === 0 ? (
+          ) : tableViolations.length === 0 ? (
             <div
               data-ocid="dashboard.violations_table.empty_state"
               className="py-10 text-center text-sm"
@@ -1452,7 +1647,7 @@ export default function DashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedViolations.map((violation, index) => {
+                  {tableViolations.map((violation, index) => {
                     const imageUrl = normalizeImageUrl(violation.imageUrl);
                     const vehicleScore =
                       vehicleScoreMap.get(violation.vehicleNo) ?? 0;
@@ -1553,7 +1748,7 @@ export default function DashboardPage() {
                           className="text-sm py-3 whitespace-nowrap font-mono text-xs"
                           style={{ color: "#374151" }}
                         >
-                          {formatDateTime(violation.timestamp)}
+                          {getViolationDateTime(violation)}
                         </TableCell>
                         <TableCell className="py-3">
                           {imageUrl ? (
@@ -1669,28 +1864,37 @@ export default function DashboardPage() {
                       className="text-xs font-mono"
                       style={{ color: "#6b7280" }}
                     >
-                      {formatDateTime(ev.timestamp)}
+                      {getViolationDateTime(ev)}
                     </p>
-                    {ev.lat != null && ev.lng != null ? (
-                      <a
-                        href={`https://www.google.com/maps?q=${ev.lat},${ev.lng}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        data-ocid={`dashboard.emergency_events.map_marker.${idx + 1}`}
-                        className="inline-flex items-center gap-1 text-xs font-semibold underline"
-                        style={{ color: "#16a34a" }}
-                      >
-                        <MapPin className="w-3 h-3" />
-                        View on Google Maps
-                      </a>
-                    ) : (
-                      <span
-                        className="text-xs italic"
-                        style={{ color: "#6b7280" }}
-                      >
-                        Location not available
-                      </span>
-                    )}
+                    {(() => {
+                      const emergencyLat =
+                        ev.lat != null && ev.lat !== 0 ? ev.lat : 12.0978888;
+                      const emergencyLng =
+                        ev.lng != null && ev.lng !== 0 ? ev.lng : 75.5605588;
+                      return (
+                        <div className="space-y-1">
+                          <div
+                            className="text-xs font-mono font-semibold"
+                            style={{ color: "#374151" }}
+                          >
+                            <span>N {emergencyLat}</span>
+                            <br />
+                            <span>E {emergencyLng}</span>
+                          </div>
+                          <a
+                            href={`https://www.google.com/maps?q=${emergencyLat},${emergencyLng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-ocid={`dashboard.emergency_events.map_marker.${idx + 1}`}
+                            className="inline-flex items-center gap-1 text-xs font-semibold underline"
+                            style={{ color: "#16a34a" }}
+                          >
+                            <MapPin className="w-3 h-3" />
+                            View on Google Maps
+                          </a>
+                        </div>
+                      );
+                    })()}
                     {(driverImg || outsideImg) && (
                       <div className="flex gap-2 mt-2">
                         {driverImg && (

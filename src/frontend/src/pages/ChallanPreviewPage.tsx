@@ -283,7 +283,7 @@ async function downloadChallanPDF(
         doc.setTextColor(107, 114, 128);
         doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
-        doc.text("Violation image not available", pageW / 2, y + 10, {
+        doc.text("No Evidence Image", pageW / 2, y + 10, {
           align: "center",
         });
         y += 24;
@@ -294,7 +294,7 @@ async function downloadChallanPDF(
       doc.setTextColor(107, 114, 128);
       doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
-      doc.text("Violation image not available", pageW / 2, y + 10, {
+      doc.text("No Evidence Image", pageW / 2, y + 10, {
         align: "center",
       });
       y += 24;
@@ -305,7 +305,7 @@ async function downloadChallanPDF(
     doc.setTextColor(107, 114, 128);
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
-    doc.text("Violation image not available", pageW / 2, y + 10, {
+    doc.text("No Evidence Image", pageW / 2, y + 10, {
       align: "center",
     });
     y += 24;
@@ -375,11 +375,7 @@ export default function ChallanPreviewPage() {
         [...g.violations].reverse().find((v) => v.imageUrl) ?? g.violations[0];
       const rawUrl = evidenceViol?.imageUrl;
       // Build uploads URL: prefer backend path
-      const evidenceImgUrl = rawUrl
-        ? rawUrl.startsWith("http") || rawUrl.startsWith("/")
-          ? rawUrl
-          : `https://vehicle-blackbox-system-1.onrender.com/uploads/${rawUrl}`
-        : undefined;
+      const evidenceImgUrl = rawUrl ? normalizeImageUrl(rawUrl) : undefined;
       await downloadChallanPDF(
         g.vehicleNo,
         g.violations,
@@ -485,11 +481,7 @@ export default function ChallanPreviewPage() {
         const evidenceViolation =
           [...g.violations].reverse().find((v) => v.imageUrl) ?? firstViolation;
         const rawImageUrl = evidenceViolation?.imageUrl;
-        const imageUrl = rawImageUrl
-          ? rawImageUrl.startsWith("http") || rawImageUrl.startsWith("/")
-            ? rawImageUrl
-            : `https://vehicle-blackbox-system-1.onrender.com/uploads/${rawImageUrl}`
-          : "";
+        const imageUrl = rawImageUrl ? normalizeImageUrl(rawImageUrl) : "";
         const challanNo = `SMVB-${g.vehicleNo.replace(/\s/g, "")}`;
         const isMultiple = g.violations.length > 1;
 
@@ -793,7 +785,7 @@ export default function ChallanPreviewPage() {
                           const parent = e.currentTarget.parentElement;
                           if (parent) {
                             parent.innerHTML =
-                              '<div class="flex items-center justify-center h-24 text-gray-400 text-sm bg-gray-50">Violation image not available</div>';
+                              '<div class="flex items-center justify-center h-24 text-gray-400 text-sm bg-gray-50">No Evidence Image</div>';
                           }
                         }}
                       />
@@ -807,7 +799,7 @@ export default function ChallanPreviewPage() {
                         backgroundColor: "#f9fafb",
                       }}
                     >
-                      Violation image not available
+                      No Evidence Image
                     </div>
                   )}
                 </div>

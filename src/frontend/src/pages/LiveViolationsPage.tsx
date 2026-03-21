@@ -17,6 +17,7 @@ import { useInterval } from "@/hooks/useInterval";
 import {
   type NodeViolation,
   fetchViolations,
+  fetchViolationsWithRetry,
   getViolationFine,
 } from "@/lib/api";
 import {
@@ -36,6 +37,7 @@ import {
   Siren,
   X,
 } from "lucide-react";
+import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 
 const DEFAULT_OWNER = "Mark";
@@ -142,6 +144,8 @@ function getStatusBadge(
 export default function LiveViolationsPage() {
   const [violations, setViolations] = useState<NodeViolation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [challanModalOpen, setChallanModalOpen] = useState(false);
@@ -187,17 +191,43 @@ export default function LiveViolationsPage() {
         setViolations(data);
         setError(null);
       })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "Failed to load data");
+      .catch(() => {
+        /* silent on poll failure - keep existing data visible */
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+      });
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: loadViolations is stable
+  // Initial connection with automatic retry (Render cold-start)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run once
   useEffect(() => {
-    loadViolations();
+    let cancelled = false;
+    const connect = async () => {
+      try {
+        const data = await fetchViolationsWithRetry(10, 3000, (attempt) => {
+          if (!cancelled) {
+            setConnecting(true);
+            setRetryAttempt(attempt);
+          }
+        });
+        if (cancelled) return;
+        setViolations(data);
+        setError(null);
+      } finally {
+        if (!cancelled) {
+          setConnecting(false);
+          setRetryAttempt(0);
+          setLoading(false);
+        }
+      }
+    };
+    connect();
+    return () => {
+      cancelled = true;
+    };
   }, []);
-  useInterval(loadViolations, 2000);
+  useInterval(loadViolations, 3000);
 
   const sortedViolations = [...violations].sort((a, b) => {
     const ta =
@@ -239,6 +269,39 @@ export default function LiveViolationsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Connecting to server banner */}
+      {connecting && (
+        <div
+          data-ocid="violations.connecting.card"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "12px 20px",
+            borderRadius: 10,
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            color: "#1d4ed8",
+            fontWeight: 600,
+            fontSize: 14,
+          }}
+        >
+          <Loader2
+            className="w-4 h-4 animate-spin"
+            style={{ color: "#1d4ed8" }}
+          />
+          <span>
+            Connecting to server… please wait
+            {retryAttempt > 0 && (
+              <span
+                style={{ fontWeight: 400, color: "#3b82f6", marginLeft: 8 }}
+              >
+                (attempt {retryAttempt} / 10)
+              </span>
+            )}
+          </span>
+        </div>
+      )}
       {/* Lightbox */}
       {lightboxUrl && (
         <div

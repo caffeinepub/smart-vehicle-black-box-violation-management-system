@@ -10,8 +10,8 @@ export const VIOLATION_SCORES: Record<string, number> = {
   "Alcohol High": 5,
   "Drowsy Driving": 5,
   "Harsh Driving": 5,
-  Accident: 5,
-  Collision: 5,
+  Accident: 0,
+  Collision: 0,
 };
 
 // Inside camera violations (driver behavior)
@@ -69,7 +69,7 @@ export function buildViolationGroups(
     current.push(v);
     currentScore += score;
 
-    if (currentScore >= 5) {
+    if (currentScore >= 3) {
       const groupId = `group-${groupIndex}`;
       const totalFine = current.reduce(
         (sum, vio) => sum + getViolationFine(vio),

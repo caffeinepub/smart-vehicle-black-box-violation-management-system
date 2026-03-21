@@ -19,6 +19,7 @@ const ALERT_CONFIG = {
     lines: (vehicleNo?: string) =>
       [
         vehicleNo ? `Vehicle Number: ${vehicleNo}` : null,
+        "🚨 ALERT 112 – Authorities notified.",
         "Violation threshold exceeded.",
         "Vehicle flagged for monitoring.",
         "Data forwarded to authorities.",
@@ -30,6 +31,7 @@ const ALERT_CONFIG = {
     icon: Zap,
     title: "🚨 ACCIDENT DETECTED",
     lines: () => [
+      "🚨 ALERT 112 – Emergency services notified.",
       "Driver safety check required.",
       "Emergency event recorded.",
       "Location shared with monitoring system.",
