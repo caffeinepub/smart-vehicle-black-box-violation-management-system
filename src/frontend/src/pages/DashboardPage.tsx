@@ -241,16 +241,9 @@ function getRiskLevel(score: number): {
 function CameraCard({
   label,
   streamSrc,
-  viewLabel,
-  openUrl,
-  onViewClick,
 }: {
   label: string;
   streamSrc: string | null;
-  startLabel?: string;
-  viewLabel: string;
-  openUrl: string;
-  onViewClick?: () => void;
 }) {
   const [status, setStatus] = React.useState<
     "waiting" | "loading" | "online" | "offline"
@@ -382,38 +375,6 @@ function CameraCard({
           </div>
         )}
       </div>
-
-      {/* Footer actions */}
-      <div className="px-4 py-3" style={{ background: "#f8fafc" }}>
-        <button
-          data-ocid="camera.open_button"
-          type="button"
-          onClick={() => {
-            if (onViewClick) {
-              onViewClick();
-            } else {
-              window.open(openUrl, "_blank");
-            }
-          }}
-          style={{
-            fontSize: 12,
-            padding: "4px 12px",
-            border: "1px solid #0B0B60",
-            color: "#0B0B60",
-            borderRadius: 6,
-            background: "white",
-            cursor: "pointer",
-          }}
-        >
-          📷 {viewLabel}
-        </button>
-        <p
-          className="text-xs"
-          style={{ color: "#9ca3af", marginTop: 6, fontStyle: "italic" }}
-        >
-          Camera accessible only when connected to the vehicle WiFi network.
-        </p>
-      </div>
     </div>
   );
 }
@@ -440,7 +401,6 @@ export default function DashboardPage() {
     getPaidGroupIds(),
   );
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const [cameraModalUrl, setCameraModalUrl] = useState<string | null>(null);
   const [centerAlert, setCenterAlert] = useState<{
     type: AlertType;
     vehicleNo?: string;
@@ -463,15 +423,6 @@ export default function DashboardPage() {
   const [emergencyEvents, setEmergencyEvents] = useState<NodeViolation[]>([]);
   const [emergencyViolation, setEmergencyViolation] =
     useState<NodeViolation | null>(null);
-  // Camera stream URLs are opened in new tab only — no embedded stream
-  const _OUTSIDE_CAMERA_URL = "http://10.245.232.48/stream"; // kept for reference
-  const [_outsideCameraUrl, setOutsideCameraUrl] = useState<string>(
-    "http://192.168.153.206/stream",
-  );
-
-  // Camera streams are LOCAL (ESP on vehicle WiFi) — do not auto-load.
-  // Users open the stream in a new tab via the "View Camera" buttons below.
-  // insideCameraStreamUrl stays null → no embedded stream attempt.
 
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
@@ -642,13 +593,6 @@ export default function DashboardPage() {
         setViolations(data);
         setLastUpdated(new Date());
         loadEmergencies();
-        // Fetch outside camera stream URL dynamically
-        fetch("https://vehicle-blackbox-system-1.onrender.com/stream")
-          .then((r) => r.json())
-          .then((d) => {
-            if (d?.stream) setOutsideCameraUrl(d.stream);
-          })
-          .catch(() => {});
       } finally {
         if (!cancelled) {
           setConnecting(false);
@@ -667,19 +611,6 @@ export default function DashboardPage() {
     loadEmergencies();
     fetchStats(); // fire-and-forget for stats endpoint
   }, 2000);
-
-  useEffect(() => {
-    const fetchStream = () => {
-      fetch("https://vehicle-blackbox-system-1.onrender.com/stream")
-        .then((r) => r.json())
-        .then((d) => {
-          if (d?.stream) setOutsideCameraUrl(d.stream);
-        })
-        .catch(() => {});
-    };
-    const id = setInterval(fetchStream, 30000);
-    return () => clearInterval(id);
-  }, []);
 
   // SSE
   useEffect(() => {
@@ -984,65 +915,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Camera Stream Modal */}
-      {cameraModalUrl && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 9999,
-            backgroundColor: "rgba(0,0,0,0.85)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          onClick={() => setCameraModalUrl(null)}
-          onKeyDown={(e) => e.key === "Escape" && setCameraModalUrl(null)}
-          aria-label="Close camera modal"
-        >
-          <div
-            style={{ position: "relative" }}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-            role="presentation"
-          >
-            <button
-              type="button"
-              onClick={() => setCameraModalUrl(null)}
-              style={{
-                position: "absolute",
-                top: -12,
-                right: -12,
-                zIndex: 1,
-                background: "rgba(0,0,0,0.7)",
-                color: "#fff",
-                border: "none",
-                borderRadius: "50%",
-                width: 28,
-                height: 28,
-                cursor: "pointer",
-                fontSize: 16,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              aria-label="Close"
-            >
-              ✕
-            </button>
-            <img
-              src={cameraModalUrl}
-              alt="Camera stream"
-              style={{
-                maxWidth: "90vw",
-                maxHeight: "80vh",
-                display: "block",
-                borderRadius: 8,
-              }}
-            />
-          </div>
-        </div>
-      )}
       {/* Center Alert Popup */}
       {centerAlert && (
         <CenterAlertPopup
@@ -1114,24 +986,10 @@ export default function DashboardPage() {
             Live Vehicle Monitoring
           </h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <CameraCard
             label="Driver Camera (Inside Camera)"
             streamSrc="http://192.168.153.206/stream"
-            viewLabel="View Driver Camera"
-            openUrl="http://192.168.153.206/stream"
-            onViewClick={() =>
-              setCameraModalUrl("http://192.168.153.206/stream")
-            }
-          />
-          <CameraCard
-            label="Road Camera (Outside Camera)"
-            streamSrc="http://192.168.153.206/stream"
-            viewLabel="View Road Camera"
-            openUrl="http://192.168.153.206/stream"
-            onViewClick={() =>
-              setCameraModalUrl("http://192.168.153.206/stream")
-            }
           />
         </div>
       </section>
