@@ -25,6 +25,7 @@ import {
   fetchViolations,
   fetchViolationsWithRetry,
   getViolationFine,
+  resetSession,
 } from "@/lib/api";
 import {
   playAlarmSound,
@@ -411,6 +412,9 @@ export default function DashboardPage() {
 
   const previousViolationsRef = useRef<Set<string>>(new Set());
   const notifiedThresholdRef = useRef<boolean>(false);
+  const streamPaused = useRef(false);
+  const popupShownRef = useRef(false);
+  const POPUP_SHOWN_KEY = "challan_popup_shown_v2";
   const [alertModal, setAlertModal] = useState<{
     type: AlertModalType;
     vehicleNo: string;
@@ -435,6 +439,9 @@ export default function DashboardPage() {
 
   // Fetch dynamic stream URL once on mount — prevents reload/flicker
   useEffect(() => {
+    // Reset session on page load for fresh start
+    resetSession();
+
     const API_BASE_URL = "https://vehicle-blackbox-system-1.onrender.com";
     fetch(`${API_BASE_URL}/stream`)
       .then((r) => r.json())
@@ -443,7 +450,32 @@ export default function DashboardPage() {
         else setStreamUrl("http://192.168.153.206/stream");
       })
       .catch(() => setStreamUrl("http://192.168.153.206/stream"));
+
+    // Auto-resume stream when tab regains focus
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        // Always restore stream on tab focus
+        streamPaused.current = false;
+        setStreamUrl(INSIDE_STREAM_URL);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
+
+  const INSIDE_STREAM_URL = "http://192.168.153.206/stream";
+
+  const pauseStream = () => {
+    streamPaused.current = true;
+    setStreamUrl("");
+  };
+
+  const resumeStream = () => {
+    if (!streamPaused.current) return;
+    streamPaused.current = false;
+    setStreamUrl(INSIDE_STREAM_URL);
+  };
 
   // Derived: violation groups
   const violationGroups = buildViolationGroups(violations, paidGroupIds);
@@ -488,6 +520,7 @@ export default function DashboardPage() {
           merged.push({ ...ev, score: 0, fine: 0 });
         }
       }
+      // Also include violations with category === 'EVENT' from main violations array
       setEmergencyEvents(merged);
     });
   };
@@ -509,6 +542,8 @@ export default function DashboardPage() {
               // Emergency events — play alarm; popup handled by center alert logic below
               playEmergencyAlarm();
             } else {
+              pauseStream();
+              setTimeout(resumeStream, 1500);
               playViolationBeep();
               showNotification(
                 "Traffic Violation Detected",
@@ -574,21 +609,19 @@ export default function DashboardPage() {
                 });
               }
             } else if (get12HourScore(data) >= CHALLAN_THRESHOLD) {
-              const challanKey = `challan-${latest.vehicleNo}-${latestTime}`;
-              const alertKey = `multipleViolation-${latest.vehicleNo}-${get12HourScore(data)}`;
-              // Only show if not already suppressed by user closing it AND not already shown for this challan
-              if (
-                !_suppressedPopupKeys.has(alertKey) &&
-                getLastShownChallanId() !== challanKey
-              ) {
-                setLastShownChallanId(challanKey);
+              // Trigger popup ONLY ONCE — tracked via ref + localStorage
+              const alreadyShown =
+                localStorage.getItem(POPUP_SHOWN_KEY) === "true" ||
+                popupShownRef.current;
+              if (!alreadyShown) {
+                popupShownRef.current = true;
+                localStorage.setItem(POPUP_SHOWN_KEY, "true");
                 playAlarmSound();
                 setCenterAlert({
                   type: "multipleViolation",
                   vehicleNo: latest.vehicleNo,
                   totalScore: get12HourScore(data),
                 });
-                // NOTE: Do NOT call handleViewChallan() here — user opens manually via popup button
               }
             }
           }
@@ -786,12 +819,28 @@ export default function DashboardPage() {
   const risk = getRiskLevel(effectiveTotalScore);
 
   // emergencyEvents is fetched from /emergencies endpoint (see state above)
-
-  const tableViolations = sortedViolations.filter(
-    (v) =>
-      !v.violationType?.toLowerCase().includes("accident") &&
-      !v.violationType?.toLowerCase().includes("collision"),
+  // Also include violations with category === 'EVENT' from main violations list
+  const categoryEventViolations = violations.filter(
+    (v) => (v as any).category === "EVENT",
   );
+  const allEmergencyEvents = [
+    ...emergencyEvents,
+    ...categoryEventViolations.filter((v) => {
+      const key = `${v.vehicleNo}-${v.timestamp}`;
+      return !emergencyEvents.some(
+        (e) => `${e.vehicleNo}-${e.timestamp}` === key,
+      );
+    }),
+  ];
+
+  const tableViolations = sortedViolations.filter((v) => {
+    const vType = v.violationType?.toLowerCase() || "";
+    if (vType.includes("accident") || vType.includes("collision")) return false;
+    // If category is set, only show "VIOLATION" category in main table
+    if ((v as any).category && (v as any).category !== "VIOLATION")
+      return false;
+    return true;
+  });
 
   const lastEventTime =
     violations.length > 0
@@ -886,6 +935,8 @@ export default function DashboardPage() {
       return;
     localStorage.removeItem("lastShownChallanId");
     localStorage.removeItem("paidViolationGroups");
+    localStorage.removeItem(POPUP_SHOWN_KEY);
+    popupShownRef.current = false;
     setPaidGroupIds(new Set());
     setApiTotalScore(0);
     setViolations([]);
@@ -1883,7 +1934,7 @@ export default function DashboardPage() {
             Emergency Events
           </h2>
         </div>
-        {emergencyEvents.length === 0 ? (
+        {allEmergencyEvents.length === 0 ? (
           <div
             data-ocid="dashboard.emergency_events.empty_state"
             className="rounded-xl border py-8 text-center"
@@ -1899,7 +1950,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {emergencyEvents.map((ev, idx) => {
+            {allEmergencyEvents.map((ev, idx) => {
               const ownerName = ev.ownerName || DEFAULT_OWNER;
               const ownerMobile = ev.mobile || DEFAULT_MOBILE;
               const driverImg = normalizeImageUrl(

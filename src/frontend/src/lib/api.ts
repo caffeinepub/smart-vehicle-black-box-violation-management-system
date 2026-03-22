@@ -15,6 +15,8 @@ interface NodeViolation {
   imagePath?: string;
   lat?: number;
   lng?: number;
+  category?: string; // "VIOLATION" | "EVENT"
+  image?: string; // raw image path from backend
 }
 
 export type { NodeViolation };
@@ -56,6 +58,14 @@ export function getViolationFine(v: NodeViolation): number {
 }
 
 export const API_BASE = "https://vehicle-blackbox-system-1.onrender.com";
+
+export async function resetSession(): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/api/reset`, { method: "POST" });
+  } catch {
+    // ignore errors - fresh session best-effort
+  }
+}
 
 /**
  * Normalises a raw object from GET /api/violations into the NodeViolation shape.
@@ -140,13 +150,15 @@ export function normalizeViolation(raw: any): NodeViolation {
     imagePath: imageUrl,
     lat: raw.lat != null ? Number(raw.lat) : undefined,
     lng: raw.lng != null ? Number(raw.lng) : undefined,
+    category: raw.category,
+    image: raw.image || raw.path || raw.imageUrl || raw.evidence || undefined,
   };
 }
 
 export async function fetchViolations(): Promise<NodeViolation[]> {
   try {
     // Primary endpoint: GET /api/violations
-    const response = await fetch(`${API_BASE}/api/violations`, {
+    const response = await fetch(`${API_BASE}/api/violations?t=${Date.now()}`, {
       method: "GET",
       headers: { Accept: "application/json" },
     });
