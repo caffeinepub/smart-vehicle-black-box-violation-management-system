@@ -11,6 +11,8 @@ interface NodeViolation {
   fine?: number;
   fineAmount?: number;
   imageUrl?: string;
+  // imagePath alias kept for API-contract compatibility (id, vehicleId, type, score, timestamp, imagePath)
+  imagePath?: string;
   lat?: number;
   lng?: number;
 }
@@ -24,6 +26,8 @@ export function getViolationId(v: NodeViolation): string {
 /** Returns the fine for a violation, checking backend `fine`, then `fineAmount`, then lookup table */
 const FINE_AMOUNTS: Record<string, number> = {
   Overspeeding: 2000,
+  Overspeed: 2000,
+  OVERSPEED: 2000,
   "No Helmet": 1000,
   "Red Light Violation": 1000,
   "Wrong Side Driving": 5000,
@@ -61,10 +65,13 @@ export const API_BASE = "https://vehicle-blackbox-system-1.onrender.com";
  *
  * Legacy shapes also supported:
  *   { vehicle/vehicleNo, type/violationType, score, time/dateTime, evidence/imageUrl }
+ *
+ * Internal contract shape also normalised:
+ *   { id, vehicleId, type, score, timestamp, imagePath }
  */
-// biome-ignore lint/suspicious/noExplicitAny: raw API response
-function normalizeViolation(raw: any): NodeViolation {
-  // image: prefer explicit imageUrl, then build from "path" field (new API), then "evidence" (legacy)
+export function normalizeViolation(raw: any): NodeViolation {
+  // ── image URL ──────────────────────────────────────────────────────────────
+  // Priority: explicit imageUrl → path (new API) → imagePath (contract shape) → evidence (legacy)
   let imageUrl: string | undefined;
   if (raw.imageUrl) {
     imageUrl = raw.imageUrl;
@@ -73,26 +80,64 @@ function normalizeViolation(raw: any): NodeViolation {
     imageUrl = raw.path.startsWith("http")
       ? raw.path
       : `${API_BASE}${raw.path}`;
+  } else if (raw.imagePath) {
+    // internal contract shape
+    imageUrl = raw.imagePath.startsWith("http")
+      ? raw.imagePath
+      : `${API_BASE}${raw.imagePath}`;
   } else if (raw.evidence) {
     imageUrl = raw.evidence;
+  } else if (raw.image) {
+    imageUrl = raw.image.startsWith("http")
+      ? raw.image
+      : `${API_BASE}${raw.image}`;
   }
 
+  // ── id ─────────────────────────────────────────────────────────────────────
+  // Generate a deterministic id when the backend doesn't provide one so
+  // React keys and deduplication logic remain stable.
+  const rawId =
+    raw.id ||
+    raw._id ||
+    (raw.timestamp
+      ? `${raw.timestamp}-${(raw.violation_code || raw.violationType || raw.type || "").replace(/\s+/g, "-")}`
+      : undefined);
+
+  // ── vehicleNo ──────────────────────────────────────────────────────────────
+  // new API has no vehicleNo; support vehicleId (contract shape) as well
+  const vehicleNo =
+    raw.vehicleNo || raw.vehicle || raw.vehicleId || "KL59AB1234";
+
+  // ── violation type ─────────────────────────────────────────────────────────
+  // new API uses "violation_code"; contract shape uses "type"; legacy uses "violationType"
+  const violationType =
+    raw.violationType || raw.violation_code || raw.type || "";
+  // Warn on OVERSPEED violations
+  if (
+    violationType === "OVERSPEED" ||
+    violationType.toLowerCase() === "overspeed"
+  ) {
+    console.warn("⚠️ Overspeed detected!");
+  }
+
+  // ── timestamp ──────────────────────────────────────────────────────────────
+  const timestamp = raw.timestamp || raw.time || raw.dateTime || "";
+
   return {
-    id: raw.id || raw._id,
+    id: rawId,
     _id: raw._id || raw.id,
-    // new API has no vehicleNo — use fallback
-    vehicleNo: raw.vehicleNo || raw.vehicle || "KL59AB1234",
+    vehicleNo,
     ownerName: raw.ownerName || raw.owner || "Mark",
     mobile: raw.mobile || "+91 8520649127",
-    // new API uses "violation_code"; legacy uses "type" / "violationType"
-    violationType: raw.violationType || raw.violation_code || raw.type || "",
-    // new API uses "timestamp"; legacy uses "time" / "dateTime"
-    timestamp: raw.timestamp || raw.time || raw.dateTime || "",
+    violationType,
+    timestamp,
     dateTime: raw.dateTime || raw.time || raw.timestamp,
     score: Number(raw.score) || 1,
     fine: raw.fine != null ? Number(raw.fine) : undefined,
     fineAmount: raw.fineAmount != null ? Number(raw.fineAmount) : undefined,
     imageUrl,
+    // keep imagePath populated for callers that check the contract shape directly
+    imagePath: imageUrl,
     lat: raw.lat != null ? Number(raw.lat) : undefined,
     lng: raw.lng != null ? Number(raw.lng) : undefined,
   };
@@ -111,7 +156,6 @@ export async function fetchViolations(): Promise<NodeViolation[]> {
     }
 
     const data = await response.json();
-    // biome-ignore lint/suspicious/noExplicitAny: raw API array
     const arr: NodeViolation[] = Array.isArray(data)
       ? data.map((v: any) => normalizeViolation(v))
       : [];
@@ -165,6 +209,105 @@ export async function fetchViolationsWithRetry(
   return [];
 }
 
+/**
+ * Fetches the cumulative violation score for a specific vehicle.
+ * Endpoint: GET /api/score/:vehicleId
+ * Returns the numeric score, or falls back to -1 on error so callers can
+ * detect failure without crashing.
+ */
+export async function fetchVehicleScore(vehicleId: string): Promise<number> {
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/score/${encodeURIComponent(vehicleId)}`,
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      },
+    );
+    if (!response.ok) return -1;
+    const data = await response.json();
+    // Backend returns: { "score": number }
+    const score = Number(data?.score);
+    return Number.isNaN(score) ? -1 : score;
+  } catch {
+    // Network failure or backend asleep — return -1 so UI falls back to local sum
+    return -1;
+  }
+}
+
+/**
+ * Fetch current score from GET /api/score (no vehicleId).
+ * Returns the numeric score, or -1 on error.
+ */
+export async function fetchScore(): Promise<number> {
+  try {
+    const response = await fetch(`${API_BASE}/api/score`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return -1;
+    const data = await response.json();
+    const score = Number(data?.score);
+    return Number.isNaN(score) ? -1 : score;
+  } catch {
+    return -1;
+  }
+}
+
+/**
+ * Uploads a violation with an optional evidence image.
+ * Endpoint: POST /upload
+ * Form fields: image (File), vehicleId (string), violationType (string)
+ */
+
+export interface UploadChallan {
+  vehicleNo?: string;
+  totalScore?: number;
+  violations?: NodeViolation[];
+  imageUrl?: string;
+  fine?: number;
+  [key: string]: any;
+}
+
+export interface UploadResponse {
+  record: NodeViolation | null;
+  score: number;
+  challan: UploadChallan | null;
+}
+
+export async function uploadViolation(
+  vehicleId: string,
+  violationType: string,
+  image?: File,
+): Promise<UploadResponse> {
+  const formData = new FormData();
+  formData.append("vehicleId", vehicleId);
+  formData.append("violationType", violationType);
+  if (image) {
+    formData.append("image", image);
+  }
+
+  const response = await fetch(`${API_BASE}/upload`, {
+    method: "POST",
+    body: formData,
+    // Do NOT set Content-Type header — browser sets it automatically with
+    // the correct multipart boundary when using FormData.
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Upload failed: HTTP ${response.status} ${response.statusText}`,
+    );
+  }
+
+  const data = await response.json();
+  return {
+    record: data.record ? normalizeViolation(data.record) : null,
+    score: Number(data.score) || 0,
+    challan: data.challan ?? null,
+  };
+}
+
 export async function payViolation(id: string): Promise<void> {
   const response = await fetch(`${API_BASE}/pay/${id}`, {
     method: "POST",
@@ -180,4 +323,21 @@ export async function payViolation(id: string): Promise<void> {
 // Legacy function for ChallanManagementPage compatibility
 export async function fetchChallans() {
   return [];
+}
+
+export async function fetchStats(): Promise<{
+  totalViolations?: number;
+  totalScore?: number;
+  accidentAlerts?: number;
+} | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/stats`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }

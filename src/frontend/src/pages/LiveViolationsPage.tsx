@@ -16,6 +16,7 @@ import {
 import { useInterval } from "@/hooks/useInterval";
 import {
   type NodeViolation,
+  fetchVehicleScore,
   fetchViolations,
   fetchViolationsWithRetry,
   getViolationFine,
@@ -143,6 +144,7 @@ function getStatusBadge(
 
 export default function LiveViolationsPage() {
   const [violations, setViolations] = useState<NodeViolation[]>([]);
+  const [_apiTotalScore, setApiTotalScore] = useState<number>(-1);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [retryAttempt, setRetryAttempt] = useState(0);
@@ -190,6 +192,10 @@ export default function LiveViolationsPage() {
         );
         setViolations(data);
         setError(null);
+        // FIX: Supplement local score with backend /api/score/:vehicleId
+        fetchVehicleScore("KL59AB1234").then((s) => {
+          if (s >= 0) setApiTotalScore(s);
+        });
       })
       .catch(() => {
         /* silent on poll failure - keep existing data visible */
@@ -200,7 +206,6 @@ export default function LiveViolationsPage() {
   };
 
   // Initial connection with automatic retry (Render cold-start)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run once
   useEffect(() => {
     let cancelled = false;
     const connect = async () => {
@@ -227,7 +232,7 @@ export default function LiveViolationsPage() {
       cancelled = true;
     };
   }, []);
-  useInterval(loadViolations, 3000);
+  useInterval(loadViolations, 2000);
 
   const sortedViolations = [...violations].sort((a, b) => {
     const ta =
@@ -640,6 +645,23 @@ export default function LiveViolationsPage() {
                           >
                             <div className="flex items-center gap-1.5">
                               {v.violationType}
+                              {v.violationType?.toLowerCase() ===
+                                "overspeed" && (
+                                <span
+                                  style={{
+                                    marginLeft: 6,
+                                    color: "#fff",
+                                    background: "#c0392b",
+                                    borderRadius: 4,
+                                    padding: "1px 6px",
+                                    fontSize: "0.7em",
+                                    fontWeight: 700,
+                                    letterSpacing: 1,
+                                  }}
+                                >
+                                  CRITICAL
+                                </span>
+                              )}
                               {isRepeated && (
                                 <span
                                   title="Repeated violation"

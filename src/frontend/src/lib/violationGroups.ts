@@ -1,10 +1,13 @@
 import { type NodeViolation, getViolationFine } from "./api";
 
+export const CHALLAN_THRESHOLD = 5;
+
 export const VIOLATION_SCORES: Record<string, number> = {
   Seatbelt: 1,
   "Door Open": 1,
   "Signal Jump": 3,
-  Overspeed: 3,
+  Overspeed: 5, // CRITICAL
+  OVERSPEED: 5, // CRITICAL - all-caps variant from ESP32
   "Harsh Braking": 3,
   "Alcohol Low": 4,
   "Alcohol High": 5,
@@ -69,7 +72,7 @@ export function buildViolationGroups(
     current.push(v);
     currentScore += score;
 
-    if (currentScore >= 3) {
+    if (currentScore >= CHALLAN_THRESHOLD) {
       const groupId = `group-${groupIndex}`;
       const totalFine = current.reduce(
         (sum, vio) => sum + getViolationFine(vio),

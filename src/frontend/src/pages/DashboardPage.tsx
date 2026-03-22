@@ -18,6 +18,9 @@ import {
 import { useInterval } from "@/hooks/useInterval";
 import {
   type NodeViolation,
+  fetchScore,
+  fetchStats,
+  fetchVehicleScore,
   fetchViolations,
   fetchViolationsWithRetry,
   getViolationFine,
@@ -28,6 +31,7 @@ import {
   playViolationBeep,
 } from "@/lib/sounds";
 import {
+  CHALLAN_THRESHOLD,
   type ViolationGroup,
   buildViolationGroups,
   getPaidGroupIds,
@@ -239,12 +243,14 @@ function CameraCard({
   streamSrc,
   viewLabel,
   openUrl,
+  onViewClick,
 }: {
   label: string;
   streamSrc: string | null;
   startLabel?: string;
   viewLabel: string;
   openUrl: string;
+  onViewClick?: () => void;
 }) {
   const [status, setStatus] = React.useState<
     "waiting" | "loading" | "online" | "offline"
@@ -301,7 +307,7 @@ function CameraCard({
           />
           <span style={{ fontSize: 10, color: "#6b7280" }}>
             {status === "online"
-              ? "LIVE"
+              ? "ACTIVE"
               : status === "offline"
                 ? "OFFLINE"
                 : status === "loading"
@@ -352,8 +358,8 @@ function CameraCard({
               }}
             >
               {status === "offline"
-                ? "Connect to vehicle WiFi to view camera"
-                : "Connect to vehicle WiFi to view camera"}
+                ? "Camera temporarily unavailable"
+                : "Loading camera stream..."}
             </p>
           </div>
         )}
@@ -382,7 +388,13 @@ function CameraCard({
         <button
           data-ocid="camera.open_button"
           type="button"
-          onClick={() => window.open(openUrl, "_blank")}
+          onClick={() => {
+            if (onViewClick) {
+              onViewClick();
+            } else {
+              window.open(openUrl, "_blank");
+            }
+          }}
           style={{
             fontSize: 12,
             padding: "4px 12px",
@@ -408,6 +420,7 @@ function CameraCard({
 
 export default function DashboardPage() {
   const [violations, setViolations] = useState<NodeViolation[]>([]);
+  const [apiTotalScore, setApiTotalScore] = useState<number>(-1);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [retryAttempt, setRetryAttempt] = useState(0);
@@ -427,6 +440,7 @@ export default function DashboardPage() {
     getPaidGroupIds(),
   );
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [cameraModalUrl, setCameraModalUrl] = useState<string | null>(null);
   const [centerAlert, setCenterAlert] = useState<{
     type: AlertType;
     vehicleNo?: string;
@@ -447,8 +461,13 @@ export default function DashboardPage() {
   // (prevents repeated popups on every 3s poll for the same latest record)
   const lastSeenViolationTimeRef = useRef<string>("");
   const [emergencyEvents, setEmergencyEvents] = useState<NodeViolation[]>([]);
+  const [emergencyViolation, setEmergencyViolation] =
+    useState<NodeViolation | null>(null);
   // Camera stream URLs are opened in new tab only — no embedded stream
   const _OUTSIDE_CAMERA_URL = "http://10.245.232.48/stream"; // kept for reference
+  const [_outsideCameraUrl, setOutsideCameraUrl] = useState<string>(
+    "http://192.168.153.206/stream",
+  );
 
   // Camera streams are LOCAL (ESP on vehicle WiFi) — do not auto-load.
   // Users open the stream in a new tab via the "View Camera" buttons below.
@@ -519,7 +538,7 @@ export default function DashboardPage() {
         }
         const score12h = get12HourScore(data);
         if (
-          score12h >= 3 &&
+          score12h >= CHALLAN_THRESHOLD &&
           !notifiedThresholdRef.current &&
           previousViolationsRef.current.size > 0
         ) {
@@ -533,7 +552,7 @@ export default function DashboardPage() {
             });
           }
         }
-        if (score12h < 3) notifiedThresholdRef.current = false;
+        if (score12h < CHALLAN_THRESHOLD) notifiedThresholdRef.current = false;
         const currentKeys = new Set(
           data.map((v) => `${v.vehicleNo}-${v.timestamp}`),
         );
@@ -551,6 +570,7 @@ export default function DashboardPage() {
               if (!shownEmergencyAlertsRef.current.has(key)) {
                 shownEmergencyAlertsRef.current.add(key);
                 playEmergencyAlarm();
+                setEmergencyViolation(latest);
                 setCenterAlert({
                   type: "accident",
                   vehicleNo: latest.vehicleNo,
@@ -561,20 +581,30 @@ export default function DashboardPage() {
               if (!shownEmergencyAlertsRef.current.has(key)) {
                 shownEmergencyAlertsRef.current.add(key);
                 playEmergencyAlarm();
+                setEmergencyViolation(latest);
                 setCenterAlert({
                   type: "collision",
                   vehicleNo: latest.vehicleNo,
                 });
               }
-            } else if (data.length >= 3) {
+            } else if (get12HourScore(data) >= CHALLAN_THRESHOLD) {
               const key = `multiple-${latestTime}`;
               if (!shownGroupAlertsRef.current.has(key)) {
                 shownGroupAlertsRef.current.add(key);
                 playAlarmSound();
+                const nonEmergencyCurrentViolations = data.filter((v) => {
+                  const t = (v.violationType || "").toLowerCase();
+                  return t !== "accident" && t !== "collision";
+                });
                 setCenterAlert({
                   type: "multipleViolation",
                   vehicleNo: latest.vehicleNo,
                 });
+                handleViewChallan(
+                  latest.vehicleNo,
+                  nonEmergencyCurrentViolations,
+                );
+                setApiTotalScore(0); // reset displayed score after challan generation
               }
             }
           }
@@ -583,6 +613,10 @@ export default function DashboardPage() {
 
         setViolations(data);
         setLastUpdated(new Date());
+        // FIX: Supplement local score with backend /api/score/:vehicleId
+        fetchScore().then((s) => {
+          if (s >= 0) setApiTotalScore(s);
+        });
       })
       .catch(() => {
         /* silent: keep existing data on polling failure */
@@ -608,6 +642,13 @@ export default function DashboardPage() {
         setViolations(data);
         setLastUpdated(new Date());
         loadEmergencies();
+        // Fetch outside camera stream URL dynamically
+        fetch("https://vehicle-blackbox-system-1.onrender.com/stream")
+          .then((r) => r.json())
+          .then((d) => {
+            if (d?.stream) setOutsideCameraUrl(d.stream);
+          })
+          .catch(() => {});
       } finally {
         if (!cancelled) {
           setConnecting(false);
@@ -624,7 +665,21 @@ export default function DashboardPage() {
   useInterval(() => {
     loadData();
     loadEmergencies();
-  }, 3000);
+    fetchStats(); // fire-and-forget for stats endpoint
+  }, 2000);
+
+  useEffect(() => {
+    const fetchStream = () => {
+      fetch("https://vehicle-blackbox-system-1.onrender.com/stream")
+        .then((r) => r.json())
+        .then((d) => {
+          if (d?.stream) setOutsideCameraUrl(d.stream);
+        })
+        .catch(() => {});
+    };
+    const id = setInterval(fetchStream, 30000);
+    return () => clearInterval(id);
+  }, []);
 
   // SSE
   useEffect(() => {
@@ -680,6 +735,7 @@ export default function DashboardPage() {
                   vehicleNo: v.vehicleNo,
                   groupId: g.groupId,
                 });
+                setApiTotalScore(0); // reset displayed score; backend will confirm on next poll
                 if (
                   "Notification" in window &&
                   Notification.permission === "granted"
@@ -692,11 +748,15 @@ export default function DashboardPage() {
             }
 
             const totalScore12h = get12HourScore(next);
-            if (totalScore12h >= 3 && !multipleAlertShownRef.current) {
+            if (
+              totalScore12h >= CHALLAN_THRESHOLD &&
+              !multipleAlertShownRef.current
+            ) {
               multipleAlertShownRef.current = true;
               setAlertModal({ type: "multiple", vehicleNo: v.vehicleNo });
             }
-            if (totalScore12h < 3) multipleAlertShownRef.current = false;
+            if (totalScore12h < CHALLAN_THRESHOLD)
+              multipleAlertShownRef.current = false;
 
             return next;
           });
@@ -756,7 +816,9 @@ export default function DashboardPage() {
   const flaggedVehicles = uniqueVehicleNos.filter((vNo) =>
     isVehicleFlagged(vNo, nonEmergencyViolations),
   ).length;
-  const risk = getRiskLevel(totalScore);
+  // FIX: Use API score when available, fall back to local sum
+  const effectiveTotalScore = apiTotalScore >= 0 ? apiTotalScore : totalScore;
+  const risk = getRiskLevel(effectiveTotalScore);
 
   // emergencyEvents is fetched from /emergencies endpoint (see state above)
 
@@ -796,9 +858,9 @@ export default function DashboardPage() {
     },
     {
       label: "Total Score",
-      value: loading ? "—" : String(totalScore),
+      value: loading ? "—" : String(effectiveTotalScore),
       icon: TrendingUp,
-      accent: totalScore >= 3 ? "#ef4444" : "#64748b",
+      accent: effectiveTotalScore >= CHALLAN_THRESHOLD ? "#ef4444" : "#64748b",
       ocid: "dashboard.total_score.card",
       to: "/analytics" as const,
     },
@@ -922,6 +984,65 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Camera Stream Modal */}
+      {cameraModalUrl && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            backgroundColor: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          onClick={() => setCameraModalUrl(null)}
+          onKeyDown={(e) => e.key === "Escape" && setCameraModalUrl(null)}
+          aria-label="Close camera modal"
+        >
+          <div
+            style={{ position: "relative" }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            role="presentation"
+          >
+            <button
+              type="button"
+              onClick={() => setCameraModalUrl(null)}
+              style={{
+                position: "absolute",
+                top: -12,
+                right: -12,
+                zIndex: 1,
+                background: "rgba(0,0,0,0.7)",
+                color: "#fff",
+                border: "none",
+                borderRadius: "50%",
+                width: 28,
+                height: 28,
+                cursor: "pointer",
+                fontSize: 16,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+            <img
+              src={cameraModalUrl}
+              alt="Camera stream"
+              style={{
+                maxWidth: "90vw",
+                maxHeight: "80vh",
+                display: "block",
+                borderRadius: 8,
+              }}
+            />
+          </div>
+        </div>
+      )}
       {/* Center Alert Popup */}
       {centerAlert && (
         <CenterAlertPopup
@@ -939,6 +1060,20 @@ export default function DashboardPage() {
                     : undefined;
                   handleViewChallan(centerAlert.vehicleNo!, grpViolations);
                 }
+              : undefined
+          }
+          onPayNow={
+            centerAlert.type === "multipleViolation"
+              ? () => {
+                  setCenterAlert(null);
+                  handleOpenPayment("KL59AB1234");
+                }
+              : undefined
+          }
+          imageUrl={emergencyViolation?.imageUrl}
+          locationStr={
+            emergencyViolation?.lat && emergencyViolation?.lng
+              ? `N ${emergencyViolation.lat} / E ${emergencyViolation.lng}`
               : undefined
           }
         />
@@ -982,15 +1117,21 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <CameraCard
             label="Driver Camera (Inside Camera)"
-            streamSrc={null}
+            streamSrc="http://192.168.153.206/stream"
             viewLabel="View Driver Camera"
-            openUrl="http://10.154.76.206/stream"
+            openUrl="http://192.168.153.206/stream"
+            onViewClick={() =>
+              setCameraModalUrl("http://192.168.153.206/stream")
+            }
           />
           <CameraCard
             label="Road Camera (Outside Camera)"
-            streamSrc={null}
+            streamSrc="http://192.168.153.206/stream"
             viewLabel="View Road Camera"
-            openUrl="http://10.245.232.48/stream"
+            openUrl="http://192.168.153.206/stream"
+            onViewClick={() =>
+              setCameraModalUrl("http://192.168.153.206/stream")
+            }
           />
         </div>
       </section>
@@ -1112,7 +1253,9 @@ export default function DashboardPage() {
             </p>
             <p className="text-xs" style={{ color: "#6b7280" }}>
               Based on total violation score:{" "}
-              <strong style={{ color: "#374151" }}>{totalScore}</strong>
+              <strong style={{ color: "#374151" }}>
+                {effectiveTotalScore}
+              </strong>
             </p>
             <div className="mt-3 flex items-center gap-2">
               <div
@@ -1122,13 +1265,13 @@ export default function DashboardPage() {
                 <div
                   className="h-full rounded-full transition-all duration-700"
                   style={{
-                    width: `${Math.min((totalScore / 15) * 100, 100)}%`,
+                    width: `${Math.min((effectiveTotalScore / 15) * 100, 100)}%`,
                     backgroundColor: risk.color,
                   }}
                 />
               </div>
               <span className="text-xs font-bold" style={{ color: risk.color }}>
-                {totalScore}/15+
+                {effectiveTotalScore}/15+
               </span>
             </div>
           </div>
@@ -2045,6 +2188,10 @@ export default function DashboardPage() {
         isPaid={paidVehicles.has(challanVehicleNo)}
         groupViolations={challanGroupViolations}
         data-ocid="dashboard.challan_modal.dialog"
+        onPayNow={() => {
+          setChallanModalOpen(false);
+          setPaymentModalOpen(true);
+        }}
       />
 
       {/* Payment Modal */}

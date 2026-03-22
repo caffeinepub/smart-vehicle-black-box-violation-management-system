@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { type NodeViolation, getViolationFine } from "@/lib/api";
 import { normalizeImageUrl } from "@/lib/violations/images";
-import { Download } from "lucide-react";
+import { Download, IndianRupee } from "lucide-react";
 import { useState } from "react";
 
 const DEFAULT_OWNER = "Mark";
@@ -24,6 +24,7 @@ interface ChallanPreviewModalProps {
   isPaid?: boolean;
   groupViolations?: NodeViolation[];
   "data-ocid"?: string;
+  onPayNow?: () => void;
 }
 
 function formatDDMMYYYY(timestamp: string | number): string {
@@ -262,6 +263,7 @@ export default function ChallanPreviewModal({
   isPaid = false,
   groupViolations,
   "data-ocid": dataOcid,
+  onPayNow,
 }: ChallanPreviewModalProps) {
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -525,6 +527,22 @@ export default function ChallanPreviewModal({
                   >
                     <td className="px-4 py-2" style={{ color: "#1f2937" }}>
                       {g.violationType}
+                      {g.violationType?.toLowerCase() === "overspeed" && (
+                        <span
+                          style={{
+                            marginLeft: 6,
+                            color: "#fff",
+                            background: "#c0392b",
+                            borderRadius: 4,
+                            padding: "1px 6px",
+                            fontSize: "0.7em",
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                          }}
+                        >
+                          CRITICAL
+                        </span>
+                      )}
                     </td>
                     <td
                       className="px-4 py-2 text-center"
@@ -621,6 +639,21 @@ export default function ChallanPreviewModal({
         </div>
 
         <DialogFooter className="px-6 pb-5">
+          {!isPaid && onPayNow && (
+            <Button
+              data-ocid="challan.pay_button"
+              onClick={onPayNow}
+              className="font-bold"
+              style={{
+                backgroundColor: "#16a34a",
+                color: "#fff",
+                borderRadius: "4px",
+              }}
+            >
+              <IndianRupee className="w-4 h-4 mr-2" />
+              Pay Now
+            </Button>
+          )}
           <Button
             data-ocid="challan.download_button"
             onClick={handleDownloadPDF}

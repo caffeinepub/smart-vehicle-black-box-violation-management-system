@@ -9,6 +9,9 @@ interface CenterAlertPopupProps {
   vehicleNo?: string;
   onClose: () => void;
   onViewChallan?: () => void;
+  onPayNow?: () => void;
+  imageUrl?: string;
+  locationStr?: string;
 }
 
 const ALERT_CONFIG = {
@@ -56,11 +59,15 @@ export default function CenterAlertPopup({
   vehicleNo,
   onClose,
   onViewChallan,
+  onPayNow,
+  imageUrl,
+  locationStr,
 }: CenterAlertPopupProps) {
   if (!open) return null;
 
   const cfg = ALERT_CONFIG[type];
   const lines = cfg.lines(vehicleNo);
+  const isEmergency = type === "accident" || type === "collision";
 
   return (
     <div
@@ -112,6 +119,24 @@ export default function CenterAlertPopup({
               {line}
             </p>
           ))}
+
+          {/* Emergency extras: image + location */}
+          {isEmergency && imageUrl && (
+            <img
+              src={imageUrl}
+              alt="Evidence"
+              style={{
+                maxWidth: "200px",
+                borderRadius: "8px",
+                marginTop: "8px",
+              }}
+            />
+          )}
+          {isEmergency && locationStr && (
+            <p className="text-sm font-mono" style={{ color: "#dc2626" }}>
+              📍 {locationStr}
+            </p>
+          )}
         </div>
 
         {/* Footer */}
@@ -136,6 +161,23 @@ export default function CenterAlertPopup({
               }}
             >
               View Challan
+            </Button>
+          )}
+          {cfg.showViewChallan && onPayNow && (
+            <Button
+              data-ocid="center-alert.pay_now_button"
+              onClick={() => {
+                onPayNow();
+                onClose();
+              }}
+              className="font-bold"
+              style={{
+                backgroundColor: "#16a34a",
+                color: "#ffffff",
+                borderRadius: "6px",
+              }}
+            >
+              Pay Now
             </Button>
           )}
           <Button
