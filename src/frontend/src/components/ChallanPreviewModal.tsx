@@ -84,8 +84,27 @@ function groupViolationsByType(
 
 // Change 1: use onloadend instead of onload, and check res.ok
 async function imageToBase64(url: string): Promise<string | null> {
+  // Canvas approach: avoids black-image bug in jsPDF caused by CORS-opaque fetch responses
   try {
-    const res = await fetch(url);
+    const imgEl = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = `${url + (url.includes("?") ? "&" : "?")}_cb=${Date.now()}`;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = imgEl.naturalWidth || imgEl.width || 640;
+    canvas.height = imgEl.naturalHeight || imgEl.height || 480;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(imgEl, 0, 0);
+    return canvas.toDataURL("image/jpeg", 0.92);
+  } catch {
+    // fall through to fetch approach
+  }
+  // Fallback: fetch with cors
+  try {
+    const res = await fetch(url, { mode: "cors" });
     if (!res.ok) return null;
     const blob = await res.blob();
     return new Promise((resolve) => {
@@ -245,7 +264,7 @@ async function generatePDF(
   doc.setTextColor(30, 30, 30);
   doc.text("Violation Type", MARGIN + 2, y + 5);
   doc.text("Score", MARGIN + 105, y + 5);
-  doc.text("Fine (₹)", MARGIN + 135, y + 5);
+  doc.text("Fine (Rs.)", MARGIN + 135, y + 5);
   y += 10;
 
   // Use individual violation rows if provided, otherwise fall back to grouped
@@ -290,7 +309,7 @@ async function generatePDF(
   doc.setTextColor(220, 38, 38);
   doc.setFontSize(11);
   doc.text(
-    `Total Fine: ₹${pdfTotalFine.toLocaleString("en-IN")}`,
+    `Total Fine: Rs. ${pdfTotalFine.toLocaleString("en-IN")}`,
     MARGIN + 70,
     y,
   );

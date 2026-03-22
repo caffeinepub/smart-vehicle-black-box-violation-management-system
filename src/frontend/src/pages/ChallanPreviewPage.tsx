@@ -48,6 +48,24 @@ function groupByVehicle(
 }
 
 async function loadImageAsDataUrl(url: string): Promise<string | null> {
+  // Try canvas approach first to avoid black image issue with jsPDF
+  try {
+    const imgEl = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = `${url + (url.includes("?") ? "&" : "?")}_t=${Date.now()}`;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = imgEl.naturalWidth || imgEl.width || 640;
+    canvas.height = imgEl.naturalHeight || imgEl.height || 480;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(imgEl, 0, 0);
+    return canvas.toDataURL("image/jpeg", 0.92);
+  } catch {
+    // fall through to fetch approach
+  }
   try {
     const response = await fetch(url, { mode: "cors" });
     if (!response.ok) return null;
@@ -226,7 +244,7 @@ async function downloadChallanPDF(
     doc.text(String(v.score ?? 0), margin + 95, y + 5.5);
     doc.setTextColor(220, 38, 38);
     doc.setFont("helvetica", "bold");
-    doc.text(`Rs.${fine.toLocaleString()}`, pageW - margin - 3, y + 5.5, {
+    doc.text(`Rs. ${fine.toLocaleString()}`, pageW - margin - 3, y + 5.5, {
       align: "right",
     });
     y += 8;
@@ -248,7 +266,7 @@ async function downloadChallanPDF(
   );
   doc.text(String(totalScore), margin + 95, y + 6.5);
   doc.setTextColor(220, 38, 38);
-  doc.text(`Rs.${totalFine.toLocaleString()}`, pageW - margin - 3, y + 6.5, {
+  doc.text(`Rs. ${totalFine.toLocaleString()}`, pageW - margin - 3, y + 6.5, {
     align: "right",
   });
   y += 18;
