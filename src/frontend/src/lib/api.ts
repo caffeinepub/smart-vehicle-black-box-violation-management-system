@@ -405,3 +405,32 @@ export async function fetchChallansFromBackend(): Promise<any[]> {
     return [];
   }
 }
+
+/**
+ * Fetches ALL data from GET /api/data — the single unified endpoint.
+ * Results are sorted newest-first. ACCIDENT/COLLISION entries are included
+ * so the caller can split them out for the Emergency Events section.
+ */
+export async function fetchData(): Promise<NodeViolation[]> {
+  const response = await fetch(`${API_BASE}/api/data?t=${Date.now()}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const raw = await response.json();
+  const arr: NodeViolation[] = Array.isArray(raw)
+    ? raw.map((v: any) => normalizeViolation(v))
+    : [];
+  arr.sort((a, b) => {
+    const ta =
+      typeof a.timestamp === "number"
+        ? a.timestamp
+        : new Date(a.timestamp as string).getTime();
+    const tb =
+      typeof b.timestamp === "number"
+        ? b.timestamp
+        : new Date(b.timestamp as string).getTime();
+    return tb - ta;
+  });
+  return arr;
+}

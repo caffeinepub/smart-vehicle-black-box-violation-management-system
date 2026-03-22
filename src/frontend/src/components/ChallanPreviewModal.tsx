@@ -82,13 +82,15 @@ function groupViolationsByType(
   return Array.from(map.values());
 }
 
+// Change 1: use onloadend instead of onload, and check res.ok
 async function imageToBase64(url: string): Promise<string | null> {
   try {
     const res = await fetch(url);
+    if (!res.ok) return null;
     const blob = await res.blob();
     return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
+      reader.onloadend = () => resolve(reader.result as string);
       reader.onerror = () => resolve(null);
       reader.readAsDataURL(blob);
     });
@@ -294,36 +296,36 @@ async function generatePDF(
   );
   y += 12;
 
-  // Evidence Images
+  // Change 2: Evidence Image (single best image, full-width 180×100mm)
   if (evidenceImages.length > 0) {
     y += 4;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(30, 30, 30);
-    doc.text("Evidence Images", MARGIN, y);
+    doc.text("Evidence Image", MARGIN, y);
     y += 6;
-    for (const imgUrl of evidenceImages) {
-      const b64 = await imageToBase64(imgUrl);
-      if (b64) {
-        if (y > 240) {
-          doc.addPage();
-          y = 20;
-        }
-        try {
-          doc.addImage(b64, "JPEG", MARGIN, y, 80, 60);
-          y += 65;
-        } catch {
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(9);
-          doc.text("No Image Available", MARGIN, y);
-          y += 8;
-        }
-      } else {
+    // Only use the first/best image
+    const imgUrl = evidenceImages[0];
+    const b64 = await imageToBase64(imgUrl);
+    if (b64) {
+      if (y > 200) {
+        doc.addPage();
+        y = 20;
+      }
+      try {
+        doc.addImage(b64, "JPEG", MARGIN, y, 180, 100);
+        y += 105;
+      } catch {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(9);
         doc.text("No Image Available", MARGIN, y);
         y += 8;
       }
+    } else {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text("No Image Available", MARGIN, y);
+      y += 8;
     }
   }
 
@@ -398,16 +400,14 @@ export default function ChallanPreviewModal({
   const issueDate = formatIssueDateOnly(new Date());
   const challanNo = `SMVB-${Date.now().toString().slice(-8)}`;
 
+  // Change 3: pass only the single best evidence image (already resolved as full URL)
   const handleDownloadPDF = async () => {
     setIsGenerating(true);
     try {
-      const evidenceImages = relevantViolations
-        .map((v) => {
-          if (v.path || v.image)
-            return `https://vehicle-blackbox-system-1.onrender.com${v.path || v.image}`;
-          return v.imageUrl || "";
-        })
-        .filter(Boolean) as string[];
+      // Pass only the single best evidence image — convert to base64 inside generatePDF
+      const evidenceImages: string[] = evidenceImageUrl
+        ? [evidenceImageUrl]
+        : [];
       await generatePDF(
         effectiveVehicleNo,
         grouped,

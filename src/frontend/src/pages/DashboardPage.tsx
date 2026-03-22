@@ -19,11 +19,11 @@ import { useInterval } from "@/hooks/useInterval";
 import {
   type NodeViolation,
   fetchAccidents,
+  fetchData,
   fetchScore,
   fetchStats,
   fetchVehicleScore,
   fetchViolations,
-  fetchViolationsWithRetry,
   getViolationFine,
   resetSession,
 } from "@/lib/api";
@@ -112,7 +112,7 @@ function buildVehicleScoreMap(
   return map;
 }
 
-function get12HourScore(violations: NodeViolation[]): number {
+function _get12HourScore(violations: NodeViolation[]): number {
   const cutoff = Date.now() - 12 * 60 * 60 * 1000;
   return violations
     .filter((v) => {
@@ -241,31 +241,10 @@ const CameraCard = React.memo(function CameraCard({
   label: string;
   streamSrc: string | null;
 }) {
-  const [status, setStatus] = React.useState<"online" | "offline" | "loading">(
-    "loading",
-  );
-  // Track whether iframe loaded successfully
-  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [status, setStatus] = React.useState<"online" | "offline">("offline");
 
-  React.useEffect(() => {
-    if (!streamSrc) return;
-    setStatus("loading");
-    // If iframe doesn't fire onLoad within 7s, mark offline
-    timeoutRef.current = setTimeout(() => setStatus("offline"), 7000);
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, [streamSrc]);
-
-  const handleLoad = () => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setStatus("online");
-  };
-
-  const handleError = () => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setStatus("offline");
-  };
+  const handleLoad = () => setStatus("online");
+  const handleError = () => setStatus("offline");
 
   return (
     <div
@@ -285,6 +264,20 @@ const CameraCard = React.memo(function CameraCard({
           >
             {label}
           </span>
+          {/* LIVE badge */}
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              color: "#fff",
+              background: "#dc2626",
+              borderRadius: 3,
+              padding: "1px 5px",
+            }}
+          >
+            LIVE (Local Network)
+          </span>
         </div>
         <div className="flex items-center gap-1.5">
           <span
@@ -292,49 +285,42 @@ const CameraCard = React.memo(function CameraCard({
               width: 8,
               height: 8,
               borderRadius: "50%",
-              backgroundColor:
-                status === "online"
-                  ? "#16a34a"
-                  : status === "offline"
-                    ? "#dc2626"
-                    : "#f59e0b",
+              backgroundColor: status === "online" ? "#16a34a" : "#dc2626",
               display: "inline-block",
             }}
           />
           <span style={{ fontSize: 10, color: "#6b7280" }}>
-            {status === "online"
-              ? "ONLINE"
-              : status === "offline"
-                ? "OFFLINE"
-                : "CONNECTING..."}
+            {status === "online" ? "ACTIVE" : "OFFLINE"}
           </span>
         </div>
       </div>
 
-      {/* Stream area — iframe for live MJPEG stream */}
+      {/* Stream area — <img> tag for MJPEG stream, no fetch, no API */}
       <div
         style={{
           position: "relative",
           backgroundColor: "#111",
-          minHeight: 180,
+          aspectRatio: "16/9",
+          overflow: "hidden",
         }}
       >
+        {/* Always render the img; it streams continuously when on vehicle WiFi */}
         {streamSrc && (
-          <iframe
+          <img
             id="cam"
             src={streamSrc}
-            title={label}
+            alt="Live camera feed"
             onLoad={handleLoad}
             onError={handleError}
             style={{
               width: "100%",
-              minHeight: 220,
-              border: "none",
-              display: "block",
+              height: "100%",
+              objectFit: "cover",
+              display: status === "online" ? "block" : "none",
             }}
-            allowFullScreen
           />
         )}
+        {/* Fallback overlay shown when stream is offline */}
         {status === "offline" && (
           <div
             style={{
@@ -357,26 +343,17 @@ const CameraCard = React.memo(function CameraCard({
                 padding: "0 16px",
               }}
             >
-              Connect to vehicle WiFi to view camera
+              Connect to vehicle WiFi to view live stream
             </p>
-          </div>
-        )}
-        {status === "loading" && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              background: "#111",
-            }}
-          >
-            <Camera style={{ width: 32, height: 32, color: "#f59e0b" }} />
-            <p style={{ color: "#9ca3af", fontSize: 13 }}>
-              Connecting to camera...
+            <p
+              style={{
+                color: "#6b7280",
+                fontSize: 11,
+                textAlign: "center",
+                padding: "0 16px",
+              }}
+            >
+              Stream: {streamSrc}
             </p>
           </div>
         )}
@@ -393,8 +370,8 @@ export default function DashboardPage() {
   const [violations, setViolations] = useState<NodeViolation[]>([]);
   const [apiTotalScore, setApiTotalScore] = useState<number>(-1);
   const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState(false);
-  const [retryAttempt, setRetryAttempt] = useState(0);
+  const [connecting, _setConnecting] = useState(false);
+  const [retryAttempt, _setRetryAttempt] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [challanModalOpen, setChallanModalOpen] = useState(false);
   const [challanVehicleNo, setChallanVehicleNo] = useState<string>("");
@@ -437,6 +414,9 @@ export default function DashboardPage() {
   const [emergencyViolation, setEmergencyViolation] =
     useState<NodeViolation | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const lastReceivedAt = useRef<number>(0);
+  const [systemOnline, setSystemOnline] = useState<boolean>(false);
+  const [accidentAlerts, setAccidentAlerts] = useState<NodeViolation[]>([]);
 
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
@@ -457,76 +437,43 @@ export default function DashboardPage() {
   // Derived: violation groups
   const violationGroups = buildViolationGroups(violations, paidGroupIds);
 
-  const loadEmergencies = () => {
-    // Fetch from both /api/events and /api/accidents, merge results
-    Promise.all([
-      fetchAccidents().catch(() => [] as NodeViolation[]),
-      fetch("https://vehicle-blackbox-system-1.onrender.com/api/emergency")
-        .then((r) => r.json())
-        .then((arr: any[]) =>
-          arr.map(
-            (raw: any) =>
-              ({
-                vehicleNo: raw.vehicleNo || raw.vehicle || "",
-                violationType: raw.violationType || raw.type || "",
-                timestamp: raw.dateTime || raw.time || raw.timestamp || "",
-                dateTime: raw.dateTime || raw.time || raw.timestamp || "",
-                imageUrl:
-                  raw.imageUrl ||
-                  (raw.image
-                    ? raw.image.startsWith("http")
-                      ? raw.image
-                      : `https://vehicle-blackbox-system-1.onrender.com${raw.image}`
-                    : undefined) ||
-                  (raw.evidence ? String(raw.evidence) : undefined),
-                score: 0,
-                fine: 0,
-                fineAmount: 0,
-                lat: raw.lat != null ? Number(raw.lat) : undefined,
-                lng: raw.lng != null ? Number(raw.lng) : undefined,
-                ownerName: raw.ownerName || raw.owner || "Mark",
-                mobile: raw.mobile || "+91 8520649127",
-              }) as NodeViolation,
-          ),
-        )
-        .catch(() => [] as NodeViolation[]),
-    ]).then(([accidents, events]) => {
-      // Merge and deduplicate by timestamp+vehicleNo
-      const seen = new Set<string>();
-      const merged: NodeViolation[] = [];
-      for (const ev of [...accidents, ...events]) {
-        const key = `${ev.vehicleNo}-${ev.timestamp}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          // Ensure score=0 for emergency events (not counted in violations)
-          merged.push({ ...ev, score: 0, fine: 0 });
-        }
-      }
-      setEmergencyEvents(merged);
-
-      // Trigger emergency popup once per new emergency event
-      for (const ev of merged) {
-        const key = `emerg-${ev.vehicleNo}-${ev.timestamp}`;
-        if (!shownEmergencyAlertsRef.current.has(key)) {
-          shownEmergencyAlertsRef.current.add(key);
-          const vType = (ev.violationType || "").toLowerCase();
-          const alertType: "accident" | "collision" = vType.includes(
-            "collision",
-          )
-            ? "collision"
-            : "accident";
-          playEmergencyAlarm();
-          setEmergencyViolation(ev);
-          setCenterAlert({ type: alertType, vehicleNo: ev.vehicleNo });
-        }
-      }
-    });
-  };
-
-  const loadData = () => {
-    fetchViolations()
+  // ─── Unified data loader (single /api/data endpoint) ────────────────────────
+  const fetchAllData = () => {
+    fetchData()
       .then((data) => {
-        const newViolations = data.filter((v) => {
+        lastReceivedAt.current = Date.now();
+
+        // Split: ACCIDENT/COLLISION → accidentAlerts; everything else → violations
+        const emergencies = data.filter((v) => {
+          const t = (v.violationType || "").toUpperCase();
+          return t === "ACCIDENT" || t === "COLLISION";
+        });
+        const regularViolations = data.filter((v) => {
+          const t = (v.violationType || "").toUpperCase();
+          return t !== "ACCIDENT" && t !== "COLLISION";
+        });
+
+        // Trigger alerts for new emergencies
+        for (const ev of emergencies) {
+          const key = `emerg-${ev.vehicleNo}-${ev.timestamp}`;
+          if (!shownEmergencyAlertsRef.current.has(key)) {
+            shownEmergencyAlertsRef.current.add(key);
+            const vType = (ev.violationType || "").toLowerCase();
+            const alertType: "accident" | "collision" = vType.includes(
+              "collision",
+            )
+              ? "collision"
+              : "accident";
+            playEmergencyAlarm();
+            setEmergencyViolation(ev);
+            setCenterAlert({ type: alertType, vehicleNo: ev.vehicleNo });
+          }
+        }
+
+        setAccidentAlerts(emergencies);
+
+        // Track new regular violations for sound/notification
+        const newViolations = regularViolations.filter((v) => {
           const key = `${v.vehicleNo}-${v.timestamp}`;
           return !previousViolationsRef.current.has(key);
         });
@@ -535,103 +482,53 @@ export default function DashboardPage() {
           previousViolationsRef.current.size > 0
         ) {
           for (const v of newViolations) {
-            const vTypeLower = (v.violationType || "").toLowerCase();
-            if (vTypeLower === "accident" || vTypeLower === "collision") {
-              // Emergency events — play alarm; popup handled by center alert logic below
-              playEmergencyAlarm();
-            } else {
-              playViolationBeep();
-              showNotification(
-                "Traffic Violation Detected",
-                "alert",
-                `Detected at ${getViolationDateTime(v)}`,
-                v.vehicleNo,
-                v.violationType,
-                v.score,
-                v.fineAmount,
-              );
-            }
+            playViolationBeep();
+            showNotification(
+              "Traffic Violation Detected",
+              "alert",
+              `Detected at ${getViolationDateTime(v)}`,
+              v.vehicleNo,
+              v.violationType,
+              v.score,
+              v.fineAmount,
+            );
           }
         }
-        const score12h = get12HourScore(data);
-        if (
-          score12h >= CHALLAN_THRESHOLD &&
-          !notifiedThresholdRef.current &&
-          previousViolationsRef.current.size > 0
-        ) {
-          notifiedThresholdRef.current = true;
-          if (
-            "Notification" in window &&
-            Notification.permission === "granted"
-          ) {
-            new Notification("SAFEWAY ALERT", {
-              body: "Multiple violations detected. Challan generated.",
-            });
-          }
-        }
-        if (score12h < CHALLAN_THRESHOLD) notifiedThresholdRef.current = false;
+
         const currentKeys = new Set(
-          data.map((v) => `${v.vehicleNo}-${v.timestamp}`),
+          regularViolations.map((v) => `${v.vehicleNo}-${v.timestamp}`),
         );
         previousViolationsRef.current = currentKeys;
 
-        // --- Popup alert checks on latest violation (prevent repeated popups) ---
-        if (data.length > 0) {
-          const latest = data[data.length - 1];
+        // Per-group popup alert (once per completed group)
+        if (regularViolations.length > 0) {
+          const latest = regularViolations[0];
           const latestTime = String(latest.timestamp || latest.dateTime || "");
           if (latestTime && latestTime !== lastSeenViolationTimeRef.current) {
             lastSeenViolationTimeRef.current = latestTime;
-            const vType = (latest.violationType || "").toLowerCase();
-            if (vType === "accident") {
-              const key = `accident-${latestTime}`;
-              if (!shownEmergencyAlertsRef.current.has(key)) {
-                shownEmergencyAlertsRef.current.add(key);
-                playEmergencyAlarm();
-                setEmergencyViolation(latest);
+            const paidIds = getPaidGroupIds();
+            const groups = buildViolationGroups(regularViolations, paidIds);
+            for (const g of groups) {
+              if (g.isComplete && !_suppressedPopupKeys.has(g.groupId)) {
+                _suppressedPopupKeys.add(g.groupId);
+                playAlarmSound();
                 setCenterAlert({
-                  type: "accident",
+                  type: "multipleViolation",
                   vehicleNo: latest.vehicleNo,
+                  groupId: g.groupId,
+                  totalScore: g.totalScore,
                 });
-              }
-            } else if (vType === "collision") {
-              const key = `collision-${latestTime}`;
-              if (!shownEmergencyAlertsRef.current.has(key)) {
-                shownEmergencyAlertsRef.current.add(key);
-                playEmergencyAlarm();
-                setEmergencyViolation(latest);
-                setCenterAlert({
-                  type: "collision",
-                  vehicleNo: latest.vehicleNo,
-                });
-              }
-            } else {
-              // Per-group popup tracking — show once per completed group
-              const paidIds = getPaidGroupIds();
-              const groups = buildViolationGroups(data, paidIds);
-              for (const g of groups) {
-                if (g.isComplete && !_suppressedPopupKeys.has(g.groupId)) {
-                  // Add to suppressed BEFORE showing to prevent re-trigger
-                  _suppressedPopupKeys.add(g.groupId);
-                  playAlarmSound();
-                  setCenterAlert({
-                    type: "multipleViolation",
-                    vehicleNo: latest.vehicleNo,
-                    groupId: g.groupId,
-                    totalScore: g.totalScore,
-                  });
-                  break; // show one popup at a time
-                }
+                break;
               }
             }
           }
         }
-        // -----------------------------------------------------------------------
 
         setViolations((prev) => {
           const existingIds = new Set(
             prev.map((v) => v.id || String(v.timestamp)),
           );
-          const newOnes = data.filter(
+          const newOnes = regularViolations.filter(
             (v) => !existingIds.has(v.id || String(v.timestamp)),
           );
           if (newOnes.length === 0) return prev;
@@ -648,7 +545,6 @@ export default function DashboardPage() {
           });
         });
         setLastUpdated(new Date());
-        // FIX: Supplement local score with backend /api/score/:vehicleId
         fetchScore().then((s) => {
           if (s >= 0) setApiTotalScore(s);
         });
@@ -661,39 +557,19 @@ export default function DashboardPage() {
       });
   };
 
-  // Initial connection with automatic retry (Render cold-start can take 30s+)
+  // Initial fetch + ONLINE/OFFLINE status ticker
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run once
   useEffect(() => {
-    let cancelled = false;
-    const connect = async () => {
-      try {
-        const data = await fetchViolationsWithRetry(10, 3000, (attempt) => {
-          if (!cancelled) {
-            setConnecting(true);
-            setRetryAttempt(attempt);
-          }
-        });
-        if (cancelled) return;
-        setViolations(data);
-        setLastUpdated(new Date());
-        loadEmergencies();
-      } finally {
-        if (!cancelled) {
-          setConnecting(false);
-          setRetryAttempt(0);
-          setLoading(false);
-        }
-      }
-    };
-    connect();
-    return () => {
-      cancelled = true;
-    };
+    fetchAllData();
+    // ONLINE/OFFLINE: check every second
+    const statusTicker = setInterval(() => {
+      setSystemOnline(Date.now() - lastReceivedAt.current < 5000);
+    }, 1000);
+    return () => clearInterval(statusTicker);
   }, []);
-  // Auto-refresh every 4 seconds
+  // Auto-refresh every 3 seconds (single endpoint)
   useInterval(() => {
-    loadData();
-    loadEmergencies();
+    fetchAllData();
   }, 3000);
 
   // SSE removed — no longer needed with manual refresh
@@ -747,11 +623,18 @@ export default function DashboardPage() {
     (v) => (v as any).category === "EVENT",
   );
   const allEmergencyEvents = [
-    ...emergencyEvents,
+    ...accidentAlerts,
+    ...emergencyEvents.filter((ev) => {
+      const key = `${ev.vehicleNo}-${ev.timestamp}`;
+      return !accidentAlerts.some(
+        (a) => `${a.vehicleNo}-${a.timestamp}` === key,
+      );
+    }),
     ...categoryEventViolations.filter((v) => {
       const key = `${v.vehicleNo}-${v.timestamp}`;
-      return !emergencyEvents.some(
-        (e) => `${e.vehicleNo}-${e.timestamp}` === key,
+      return (
+        !accidentAlerts.some((a) => `${a.vehicleNo}-${a.timestamp}` === key) &&
+        !emergencyEvents.some((e) => `${e.vehicleNo}-${e.timestamp}` === key)
       );
     }),
   ];
@@ -864,6 +747,7 @@ export default function DashboardPage() {
     setApiTotalScore(0);
     setViolations([]);
     setEmergencyEvents([]);
+    setAccidentAlerts([]);
     setCenterAlert(null);
     lastSeenViolationTimeRef.current = "";
     previousViolationsRef.current = new Set();
@@ -1071,16 +955,37 @@ export default function DashboardPage() {
                 </span>
                 <span style={{ color: "#6b7280" }}>·</span>
                 <span className="text-xs" style={{ color: "#6b7280" }}>
-                  Auto-refresh every 4s
+                  Auto-refresh every 3s
                 </span>
               </>
             )}
           </div>
-          {lastUpdated && (
-            <span className="text-xs font-mono" style={{ color: "#6b7280" }}>
-              Updated: {lastUpdated.toLocaleTimeString("en-IN")}
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            <div
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-bold"
+              style={{
+                backgroundColor: systemOnline ? "#dcfce7" : "#fee2e2",
+                color: systemOnline ? "#16a34a" : "#dc2626",
+                border: `1px solid ${systemOnline ? "#bbf7d0" : "#fecaca"}`,
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  backgroundColor: systemOnline ? "#16a34a" : "#dc2626",
+                  display: "inline-block",
+                }}
+              />
+              {systemOnline ? "ONLINE" : "OFFLINE"}
+            </div>
+            {lastUpdated && (
+              <span className="text-xs font-mono" style={{ color: "#6b7280" }}>
+                Updated: {lastUpdated.toLocaleTimeString("en-IN")}
+              </span>
+            )}
+          </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {statCards.map((card) => {
