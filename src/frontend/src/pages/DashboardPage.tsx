@@ -241,22 +241,31 @@ const CameraCard = React.memo(function CameraCard({
   label: string;
   streamSrc: string | null;
 }) {
-  const [status, setStatus] = React.useState<
-    "waiting" | "loading" | "online" | "offline"
-  >("waiting");
-  const imgRef = React.useRef<HTMLImageElement>(null);
+  const [status, setStatus] = React.useState<"online" | "offline" | "loading">(
+    "loading",
+  );
+  // Track whether iframe loaded successfully
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
-    if (streamSrc) {
-      // FIX: MJPEG streams never fire onLoad; set active immediately and rely on onError for failure
-      setStatus("online");
-      if (imgRef.current) {
-        imgRef.current.src = streamSrc;
-      }
-    } else {
-      setStatus("waiting");
-    }
+    if (!streamSrc) return;
+    setStatus("loading");
+    // If iframe doesn't fire onLoad within 7s, mark offline
+    timeoutRef.current = setTimeout(() => setStatus("offline"), 7000);
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
   }, [streamSrc]);
+
+  const handleLoad = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setStatus("online");
+  };
+
+  const handleError = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setStatus("offline");
+  };
 
   return (
     <div
@@ -294,17 +303,15 @@ const CameraCard = React.memo(function CameraCard({
           />
           <span style={{ fontSize: 10, color: "#6b7280" }}>
             {status === "online"
-              ? "ACTIVE"
+              ? "ONLINE"
               : status === "offline"
                 ? "OFFLINE"
-                : status === "loading"
-                  ? "CONNECTING..."
-                  : "STANDBY"}
+                : "CONNECTING..."}
           </span>
         </div>
       </div>
 
-      {/* Stream area */}
+      {/* Stream area — iframe for live MJPEG stream */}
       <div
         style={{
           position: "relative",
@@ -312,17 +319,23 @@ const CameraCard = React.memo(function CameraCard({
           minHeight: 180,
         }}
       >
-        <img
-          ref={imgRef}
-          src={streamSrc || undefined}
-          alt={label}
-          style={{
-            width: "100%",
-            display: "block",
-          }}
-          onError={() => setStatus("offline")}
-        />
-        {(status === "offline" || status === "waiting") && (
+        {streamSrc && (
+          <iframe
+            id="cam"
+            src={streamSrc}
+            title={label}
+            onLoad={handleLoad}
+            onError={handleError}
+            style={{
+              width: "100%",
+              minHeight: 220,
+              border: "none",
+              display: "block",
+            }}
+            allowFullScreen
+          />
+        )}
+        {status === "offline" && (
           <div
             style={{
               position: "absolute",
@@ -332,6 +345,7 @@ const CameraCard = React.memo(function CameraCard({
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
+              background: "#111",
             }}
           >
             <Camera style={{ width: 32, height: 32, color: "#6b7280" }} />
@@ -343,9 +357,7 @@ const CameraCard = React.memo(function CameraCard({
                 padding: "0 16px",
               }}
             >
-              {status === "offline"
-                ? "Connect to vehicle WiFi to view camera"
-                : "Loading camera stream..."}
+              Connect to vehicle WiFi to view camera
             </p>
           </div>
         )}
@@ -359,9 +371,10 @@ const CameraCard = React.memo(function CameraCard({
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
+              background: "#111",
             }}
           >
-            <Camera style={{ width: 32, height: 32, color: "#6b7280" }} />
+            <Camera style={{ width: 32, height: 32, color: "#f59e0b" }} />
             <p style={{ color: "#9ca3af", fontSize: 13 }}>
               Connecting to camera...
             </p>
@@ -407,7 +420,6 @@ export default function DashboardPage() {
 
   const previousViolationsRef = useRef<Set<string>>(new Set());
   const notifiedThresholdRef = useRef<boolean>(false);
-  const streamPaused = useRef(false);
   const popupShownRef = useRef(false);
   const POPUP_SHOWN_KEY = "challan_popup_shown_v2";
   const [alertModal, setAlertModal] = useState<{
@@ -432,45 +444,15 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Fetch dynamic stream URL once on mount — prevents reload/flicker
+  const INSIDE_STREAM_URL = "http://192.168.153.206:81/stream";
+
+  // Set stream URL once on mount — never reload on data refresh or tab switch
   useEffect(() => {
     // Reset session on page load for fresh start
     resetSession();
-
-    const API_BASE_URL = "https://vehicle-blackbox-system-1.onrender.com";
-    fetch(`${API_BASE_URL}/stream`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d?.stream) setStreamUrl(d.stream);
-        else setStreamUrl("http://192.168.153.206/stream");
-      })
-      .catch(() => setStreamUrl("http://192.168.153.206/stream"));
-
-    // Auto-resume stream when tab regains focus
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        // Always restore stream on tab focus
-        streamPaused.current = false;
-        setStreamUrl(INSIDE_STREAM_URL);
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () =>
-      document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
-
-  const INSIDE_STREAM_URL = "http://192.168.153.206/stream";
-
-  const pauseStream = () => {
-    streamPaused.current = true;
-    setStreamUrl("");
-  };
-
-  const resumeStream = () => {
-    if (!streamPaused.current) return;
-    streamPaused.current = false;
+    // Set stream URL once and never change it again
     setStreamUrl(INSIDE_STREAM_URL);
-  };
+  }, []);
 
   // Derived: violation groups
   const violationGroups = buildViolationGroups(violations, paidGroupIds);
@@ -479,7 +461,7 @@ export default function DashboardPage() {
     // Fetch from both /api/events and /api/accidents, merge results
     Promise.all([
       fetchAccidents().catch(() => [] as NodeViolation[]),
-      fetch("https://vehicle-blackbox-system-1.onrender.com/api/events")
+      fetch("https://vehicle-blackbox-system-1.onrender.com/api/emergency")
         .then((r) => r.json())
         .then((arr: any[]) =>
           arr.map(
@@ -520,8 +502,24 @@ export default function DashboardPage() {
           merged.push({ ...ev, score: 0, fine: 0 });
         }
       }
-      // Also include violations with category === 'EVENT' from main violations array
       setEmergencyEvents(merged);
+
+      // Trigger emergency popup once per new emergency event
+      for (const ev of merged) {
+        const key = `emerg-${ev.vehicleNo}-${ev.timestamp}`;
+        if (!shownEmergencyAlertsRef.current.has(key)) {
+          shownEmergencyAlertsRef.current.add(key);
+          const vType = (ev.violationType || "").toLowerCase();
+          const alertType: "accident" | "collision" = vType.includes(
+            "collision",
+          )
+            ? "collision"
+            : "accident";
+          playEmergencyAlarm();
+          setEmergencyViolation(ev);
+          setCenterAlert({ type: alertType, vehicleNo: ev.vehicleNo });
+        }
+      }
     });
   };
 
@@ -542,8 +540,6 @@ export default function DashboardPage() {
               // Emergency events — play alarm; popup handled by center alert logic below
               playEmergencyAlarm();
             } else {
-              pauseStream();
-              setTimeout(resumeStream, 1500);
               playViolationBeep();
               showNotification(
                 "Traffic Violation Detected",
@@ -631,7 +627,26 @@ export default function DashboardPage() {
         }
         // -----------------------------------------------------------------------
 
-        setViolations(data);
+        setViolations((prev) => {
+          const existingIds = new Set(
+            prev.map((v) => v.id || String(v.timestamp)),
+          );
+          const newOnes = data.filter(
+            (v) => !existingIds.has(v.id || String(v.timestamp)),
+          );
+          if (newOnes.length === 0) return prev;
+          return [...prev, ...newOnes].sort((a, b) => {
+            const ta =
+              typeof a.timestamp === "number"
+                ? a.timestamp
+                : new Date(a.timestamp as string).getTime();
+            const tb =
+              typeof b.timestamp === "number"
+                ? b.timestamp
+                : new Date(b.timestamp as string).getTime();
+            return tb - ta;
+          });
+        });
         setLastUpdated(new Date());
         // FIX: Supplement local score with backend /api/score/:vehicleId
         fetchScore().then((s) => {
@@ -675,108 +690,13 @@ export default function DashboardPage() {
       cancelled = true;
     };
   }, []);
+  // Auto-refresh every 4 seconds
   useInterval(() => {
     loadData();
     loadEmergencies();
-    fetchStats(); // fire-and-forget for stats endpoint
-  }, 2000);
+  }, 3000);
 
-  // SSE
-  useEffect(() => {
-    const API_BASE = "https://vehicle-blackbox-system-1.onrender.com";
-    let es: EventSource | null = null;
-    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
-    function connect() {
-      es = new EventSource(`${API_BASE}/events`);
-      es.onmessage = (event) => {
-        try {
-          const v: NodeViolation = JSON.parse(event.data);
-          setViolations((prev) => {
-            const key = `${v.vehicleNo}-${v.timestamp}`;
-            if (prev.some((p) => `${p.vehicleNo}-${p.timestamp}` === key))
-              return prev;
-
-            const vType = (v.violationType || "").toLowerCase();
-            const isEmergency =
-              vType.includes("accident") || vType.includes("collision");
-
-            if (isEmergency) {
-              playEmergencyAlarm();
-              if (!shownEmergencyAlertsRef.current.has(key)) {
-                shownEmergencyAlertsRef.current.add(key);
-                const aType = vType.includes("accident")
-                  ? "accident"
-                  : "collision";
-                setCenterAlert({ type: aType, vehicleNo: v.vehicleNo });
-              }
-              if (
-                "Notification" in window &&
-                Notification.permission === "granted"
-              ) {
-                new Notification("SAFEWAY EMERGENCY", {
-                  body: `Possible accident/collision detected for ${v.vehicleNo}`,
-                });
-              }
-            } else {
-              playViolationBeep();
-            }
-
-            const next = [v, ...prev];
-
-            // Check if a new group just completed
-            const paidIds = getPaidGroupIds();
-            const groups = buildViolationGroups(next, paidIds);
-            for (const g of groups) {
-              if (g.isComplete && !_suppressedPopupKeys.has(g.groupId)) {
-                _suppressedPopupKeys.add(g.groupId);
-                playAlarmSound();
-                setCenterAlert({
-                  type: "multipleViolation",
-                  vehicleNo: v.vehicleNo,
-                  groupId: g.groupId,
-                  totalScore: get12HourScore([v, ...prev]),
-                });
-                // FIX: do not reset score to 0; backend will confirm updated score on next poll
-                if (
-                  "Notification" in window &&
-                  Notification.permission === "granted"
-                ) {
-                  new Notification("SAFEWAY ALERT", {
-                    body: "Multiple violations detected. Challan generated.",
-                  });
-                }
-              }
-            }
-
-            const totalScore12h = get12HourScore(next);
-            if (
-              totalScore12h >= CHALLAN_THRESHOLD &&
-              !multipleAlertShownRef.current
-            ) {
-              multipleAlertShownRef.current = true;
-              setAlertModal({ type: "multiple", vehicleNo: v.vehicleNo });
-            }
-            if (totalScore12h < CHALLAN_THRESHOLD)
-              multipleAlertShownRef.current = false;
-
-            return next;
-          });
-          setLastUpdated(new Date());
-        } catch {
-          /* ignore */
-        }
-      };
-      es.onerror = () => {
-        es?.close();
-        retryTimeout = setTimeout(connect, 5000);
-      };
-    }
-    connect();
-    return () => {
-      es?.close();
-      if (retryTimeout) clearTimeout(retryTimeout);
-    };
-  }, []);
+  // SSE removed — no longer needed with manual refresh
 
   // Sort violations newest first
   const sortedViolations = [...violations].sort((a, b) => {
@@ -887,7 +807,7 @@ export default function DashboardPage() {
       value:
         loading && violations.length === 0
           ? "—"
-          : `₹${(effectiveTotalScore * 1000).toLocaleString("en-IN")}`,
+          : `₹${_totalFineCollected.toLocaleString("en-IN")}`,
       icon: CreditCard,
       accent: "#22c55e",
       ocid: "dashboard.total_fine.card",
@@ -1059,7 +979,7 @@ export default function DashboardPage() {
           }
           imageUrl={
             emergencyViolation?.image
-              ? `${BASE}${emergencyViolation.image}`
+              ? `${BASE}${emergencyViolation.path || emergencyViolation.image}`
               : emergencyViolation?.imageUrl
           }
           locationStr={
@@ -1092,7 +1012,7 @@ export default function DashboardPage() {
           traffic violations, generates challans automatically, and forwards
           repeat offenders to RTO authorities. Data updates every 3 seconds.
         </p>
-        <div className="mt-3">
+        <div className="mt-3 flex gap-2">
           <Button
             data-ocid="dashboard.reset_data.button"
             variant="outline"
@@ -1151,7 +1071,7 @@ export default function DashboardPage() {
                 </span>
                 <span style={{ color: "#6b7280" }}>·</span>
                 <span className="text-xs" style={{ color: "#6b7280" }}>
-                  Auto-refresh every 2s
+                  Auto-refresh every 4s
                 </span>
               </>
             )}
@@ -1467,6 +1387,7 @@ export default function DashboardPage() {
                         >
                           {[
                             "Violation Type",
+                            "Location",
                             "Camera",
                             "Score",
                             "Fine",
@@ -1487,7 +1408,7 @@ export default function DashboardPage() {
                         {group.violations.map((v, vIdx) => {
                           const inside = isInsideCamViolation(v.violationType);
                           const imgUrl = v.image
-                            ? `${BASE}${v.image}`
+                            ? `${BASE}${v.path || v.image}`
                             : normalizeImageUrl(v.imageUrl);
                           return (
                             <tr
@@ -1504,6 +1425,26 @@ export default function DashboardPage() {
                               >
                                 {v.violationType}
                               </td>
+                              <td
+                                className="px-4 py-2 text-xs"
+                                style={{ color: "#374151", maxWidth: 120 }}
+                              >
+                                {v.location ? (
+                                  <span>
+                                    📍 {v.location}
+                                    <br />
+                                    <span style={{ color: "#9ca3af" }}>
+                                      ({v.lat ?? "—"}, {v.lng ?? "—"})
+                                    </span>
+                                  </span>
+                                ) : v.lat && v.lng ? (
+                                  <span>
+                                    📍 ({v.lat}, {v.lng})
+                                  </span>
+                                ) : (
+                                  <span style={{ color: "#9ca3af" }}>—</span>
+                                )}
+                              </td>
                               <td className="px-4 py-2">
                                 <span
                                   className="text-xs font-bold px-2 py-0.5 rounded"
@@ -1517,7 +1458,7 @@ export default function DashboardPage() {
                                       : "1px solid #bbf7d0",
                                   }}
                                 >
-                                  {inside ? "Inside Cam" : "Outside Cam"}
+                                  {inside ? "Inside Cam" : "Inside Cam"}
                                 </span>
                               </td>
                               <td className="px-4 py-2">
@@ -1784,7 +1725,7 @@ export default function DashboardPage() {
                 <TableBody>
                   {tableViolations.map((violation, index) => {
                     const imageUrl = violation.image
-                      ? `${BASE}${violation.image}`
+                      ? `${BASE}${violation.path || violation.image}`
                       : normalizeImageUrl(violation.imageUrl);
                     const vehicleScore =
                       vehicleScoreMap.get(violation.vehicleNo) ?? 0;
@@ -1851,7 +1792,7 @@ export default function DashboardPage() {
                                 : "1px solid #bbf7d0",
                             }}
                           >
-                            {inside ? "Inside" : "Outside"}
+                            {inside ? "Inside" : "Inside"}
                           </span>
                         </TableCell>
                         <TableCell className="py-3">
@@ -2036,20 +1977,25 @@ export default function DashboardPage() {
                         </div>
                       );
                     })()}
-                    {(ev.image || ev.imageUrl || driverImg) && (
+                    {ev.image || ev.imageUrl || driverImg ? (
                       <img
                         src={
                           ev.image
-                            ? `${BASE}${ev.image}`
+                            ? `${BASE}${ev.path || ev.image}`
                             : ev.imageUrl || driverImg
                         }
-                        alt="Evidence"
+                        alt="Emergency evidence"
                         className="w-full h-24 object-cover rounded mt-2"
                         style={{ border: "1px solid #e2e8f0" }}
                         onError={(e) => {
-                          e.currentTarget.style.display = "none";
+                          (e.currentTarget as HTMLImageElement).style.display =
+                            "none";
                         }}
                       />
+                    ) : (
+                      <span style={{ color: "#9ca3af", fontSize: 12 }}>
+                        No Image Available
+                      </span>
                     )}
                   </div>
                 </div>

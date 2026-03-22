@@ -159,7 +159,6 @@ export default function LiveViolationsPage() {
   );
 
   const previousViolationsRef = useRef<Set<string>>(new Set());
-
   const loadViolations = () => {
     fetchViolations()
       .then((data) => {
@@ -183,7 +182,26 @@ export default function LiveViolationsPage() {
         previousViolationsRef.current = new Set(
           data.map((v) => `${v.vehicleNo}-${v.timestamp}`),
         );
-        setViolations(data);
+        setViolations((prev) => {
+          const existingIds = new Set(
+            prev.map((v) => v.id || String(v.timestamp)),
+          );
+          const newOnes = data.filter(
+            (v) => !existingIds.has(v.id || String(v.timestamp)),
+          );
+          if (newOnes.length === 0) return prev;
+          return [...prev, ...newOnes].sort((a, b) => {
+            const ta =
+              typeof a.timestamp === "number"
+                ? a.timestamp
+                : new Date(a.timestamp as string).getTime();
+            const tb =
+              typeof b.timestamp === "number"
+                ? b.timestamp
+                : new Date(b.timestamp as string).getTime();
+            return tb - ta;
+          });
+        });
         setError(null);
         // FIX: Supplement local score with backend /api/score/:vehicleId
         fetchVehicleScore("KL59AB1234").then((s) => {
@@ -225,7 +243,10 @@ export default function LiveViolationsPage() {
       cancelled = true;
     };
   }, []);
-  useInterval(loadViolations, 2000);
+  // Auto-refresh every 3 seconds
+  useInterval(() => {
+    loadViolations();
+  }, 3000);
 
   const sortedViolations = [...violations].sort((a, b) => {
     const ta =
@@ -336,7 +357,7 @@ export default function LiveViolationsPage() {
           Live Violations
         </h1>
         <p className="text-sm" style={{ color: "#6b7280" }}>
-          Real-time traffic violation monitoring · Auto-refresh every 2s
+          Real-time traffic violation monitoring
         </p>
       </div>
 
@@ -562,9 +583,10 @@ export default function LiveViolationsPage() {
                       {} as Record<string, number>,
                     );
                     return sortedViolations.map((v, index) => {
-                      const imageUrl = v.image
-                        ? `${BASE}${v.image}`
-                        : normalizeImageUrl(v.imageUrl);
+                      const imageUrl =
+                        v.path || v.image
+                          ? `${BASE}${v.path || v.image}`
+                          : normalizeImageUrl(v.imageUrl);
                       const vehicleScore =
                         vehicleScoreMap.get(v.vehicleNo) ?? 0;
                       const isPaidVehicle = paidVehicles.has(v.vehicleNo);
@@ -683,7 +705,7 @@ export default function LiveViolationsPage() {
                                   : "1px solid #bbf7d0",
                               }}
                             >
-                              {inside ? "Inside" : "Outside"}
+                              {inside ? "Inside" : "Inside"}
                             </span>
                           </TableCell>
                           <TableCell className="py-3">

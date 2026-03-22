@@ -252,7 +252,7 @@ async function generatePDF(
       ? individualViolations.map((v) => ({
           type: v.violationType || "",
           score: v.score,
-          fine: v.score * 1000,
+          fine: v.fine != null ? v.fine : v.score * 1000,
         }))
       : grouped.flatMap((g) =>
           Array(g.count)
@@ -284,10 +284,11 @@ async function generatePDF(
   doc.text("Total Score:", MARGIN + 85, y);
   doc.text(String(totalScore), MARGIN + 115, y);
   y += 6;
+  const pdfTotalFine = tableRows.reduce((s, r) => s + r.fine, 0);
   doc.setTextColor(220, 38, 38);
   doc.setFontSize(11);
   doc.text(
-    `Total Fine: ₹${(totalScore * 1000).toLocaleString("en-IN")}`,
+    `Total Fine: ₹${pdfTotalFine.toLocaleString("en-IN")}`,
     MARGIN + 70,
     y,
   );
@@ -388,10 +389,11 @@ export default function ChallanPreviewModal({
 
   const _latestWithImage = [...relevantViolations]
     .reverse()
-    .find((v) => v.image || v.imageUrl);
-  const evidenceImageUrl = _latestWithImage?.image
-    ? `https://vehicle-blackbox-system-1.onrender.com${_latestWithImage.image}`
-    : normalizeImageUrl(_latestWithImage?.imageUrl);
+    .find((v) => v.path || v.image || v.imageUrl);
+  const evidenceImageUrl =
+    _latestWithImage?.path || _latestWithImage?.image
+      ? `https://vehicle-blackbox-system-1.onrender.com${_latestWithImage?.path || _latestWithImage?.image}`
+      : normalizeImageUrl(_latestWithImage?.imageUrl);
 
   const issueDate = formatIssueDateOnly(new Date());
   const challanNo = `SMVB-${Date.now().toString().slice(-8)}`;
@@ -401,8 +403,8 @@ export default function ChallanPreviewModal({
     try {
       const evidenceImages = relevantViolations
         .map((v) => {
-          if (v.image)
-            return `https://vehicle-blackbox-system-1.onrender.com${v.image}`;
+          if (v.path || v.image)
+            return `https://vehicle-blackbox-system-1.onrender.com${v.path || v.image}`;
           return v.imageUrl || "";
         })
         .filter(Boolean) as string[];
@@ -666,7 +668,7 @@ export default function ChallanPreviewModal({
                       className="px-4 py-2 text-right font-bold"
                       style={{ color: "#dc2626" }}
                     >
-                      ₹{(g.totalScore * 1000).toLocaleString("en-IN")}
+                      ₹{g.totalFine.toLocaleString("en-IN")}
                     </td>
                   </tr>
                 ))}
@@ -695,7 +697,7 @@ export default function ChallanPreviewModal({
                     className="px-4 py-2 text-right font-black text-base"
                     style={{ color: "#dc2626" }}
                   >
-                    ₹{(totalScore * 1000).toLocaleString("en-IN")}
+                    ₹{totalFine.toLocaleString("en-IN")}
                   </td>
                 </tr>
               </tfoot>

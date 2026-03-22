@@ -2,14 +2,14 @@ import { Camera } from "lucide-react";
 
 interface EvidenceSectionProps {
   driverCameraUrl?: string;
-  roadCameraUrl?: string;
+  insideCameraUrl?: string;
 }
 
 export default function EvidenceSection({
   driverCameraUrl,
-  roadCameraUrl,
+  insideCameraUrl,
 }: EvidenceSectionProps) {
-  const hasEvidence = driverCameraUrl || roadCameraUrl;
+  const hasEvidence = driverCameraUrl || insideCameraUrl;
 
   if (!hasEvidence) {
     return (
@@ -28,11 +28,11 @@ export default function EvidenceSection({
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Camera className="w-4 h-4 text-gov-blue" />
-              <p className="font-medium text-gray-900">Driver Camera</p>
+              <p className="font-medium text-gray-900">Inside Camera</p>
             </div>
             <img
               src={driverCameraUrl}
-              alt="Driver Camera Evidence"
+              alt="Inside Camera Evidence"
               className="w-full border border-gray-300"
               onError={(e) => {
                 e.currentTarget.src =
@@ -41,15 +41,15 @@ export default function EvidenceSection({
             />
           </div>
         )}
-        {roadCameraUrl && (
+        {insideCameraUrl && (
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Camera className="w-4 h-4 text-gov-blue" />
-              <p className="font-medium text-gray-900">Road Camera</p>
+              <p className="font-medium text-gray-900">Inside Camera</p>
             </div>
             <img
-              src={roadCameraUrl}
-              alt="Road Camera Evidence"
+              src={insideCameraUrl}
+              alt="Inside Camera Evidence"
               className="w-full border border-gray-300"
               onError={(e) => {
                 e.currentTarget.src =

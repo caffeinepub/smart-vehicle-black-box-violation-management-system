@@ -17,6 +17,7 @@ interface NodeViolation {
   lng?: number;
   category?: string; // "VIOLATION" | "EVENT"
   image?: string; // raw image path from backend
+  path?: string; // raw path from new API response
   location?: string; // location string from backend
 }
 
@@ -122,7 +123,11 @@ export function normalizeViolation(raw: any): NodeViolation {
   // ── violation type ─────────────────────────────────────────────────────────
   // new API uses "violation_code"; contract shape uses "type"; legacy uses "violationType"
   const violationType =
-    raw.violationType || raw.violation_code || raw.type || "";
+    raw.violation_type ||
+    raw.violationType ||
+    raw.violation_code ||
+    raw.type ||
+    "";
   // Warn on OVERSPEED violations
   if (
     violationType === "OVERSPEED" ||
@@ -155,6 +160,8 @@ export function normalizeViolation(raw: any): NodeViolation {
     location: raw.location || undefined,
     // Keep image as raw path so callers can do BASE + record.image
     image: raw.path || raw.image || undefined,
+    // Keep path from new API (e.g. /uploads/xxx.jpg) for direct use
+    path: raw.path || undefined,
   };
 }
 

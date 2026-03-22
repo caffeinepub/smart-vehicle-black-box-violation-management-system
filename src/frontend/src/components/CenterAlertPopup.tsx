@@ -33,22 +33,23 @@ const ALERT_CONFIG = {
   accident: {
     headerBg: "#dc2626",
     icon: Zap,
-    title: "🚨 ACCIDENT DETECTED",
+    title: "🚨 Emergency Detected – Authorities Notified",
     lines: () => [
-      "🚨 ALERT 112 – Emergency services notified.",
-      "Driver safety check required.",
-      "Emergency event recorded.",
+      "Emergency services have been alerted.",
+      "Driver safety check required immediately.",
+      "Emergency event recorded and logged.",
       "Location shared with monitoring system.",
     ],
     showViewChallan: false,
   },
   collision: {
-    headerBg: "#b91c1c",
+    headerBg: "#dc2626",
     icon: AlertTriangle,
-    title: "💥 COLLISION DETECTED",
+    title: "🚨 Emergency Detected – Authorities Notified",
     lines: () => [
-      "Possible vehicle impact detected.",
-      "Driver safety check required.",
+      "Collision detected. Emergency services alerted.",
+      "Driver safety check required immediately.",
+      "Incident recorded and logged.",
     ],
     showViewChallan: false,
   },
@@ -74,13 +75,13 @@ export default function CenterAlertPopup({
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
+      style={{ backgroundColor: "rgba(0,0,0,0.7)", zIndex: 9999 }}
     >
       <div
         className="rounded-2xl shadow-2xl overflow-hidden w-full max-w-md mx-4"
         style={{ backgroundColor: "#ffffff" }}
       >
-        {/* Header */}
+        {/* Header — red for all types */}
         <div
           className="px-6 py-4 flex items-center justify-between"
           style={{ backgroundColor: cfg.headerBg }}
@@ -133,9 +134,13 @@ export default function CenterAlertPopup({
               src={imageUrl}
               alt="Evidence"
               style={{
-                maxWidth: "200px",
+                maxWidth: "100%",
                 borderRadius: "8px",
                 marginTop: "8px",
+                border: "2px solid #fecaca",
+              }}
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = "none";
               }}
             />
           )}

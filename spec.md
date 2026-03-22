@@ -1,35 +1,30 @@
 # Smart Vehicle Black Box & Violation Management System
 
 ## Current State
-Existing dashboard built with React + TypeScript. Has camera panel, violation table, emergency events, challan system, popup alerts, and sound notifications. Uses /api/violations polling, /api/score, /api/stats, /api/events endpoints.
+Production dashboard with React frontend, auto-polling backend, camera stream, violation table, challan system, emergency events section, popup alerts, and sound notifications.
 
 ## Requested Changes (Diff)
 
 ### Add
-- POST /api/reset call on page load to start fresh session
-- Cache-busting timestamp on every /api/violations fetch
-- Pause/resume camera stream logic: pause on violation detected, resume after 1.5s
-- Auto-resume camera stream on tab focus (visibilitychange event)
-- Separate violation display by category: "VIOLATION" in main table, "EVENT" in Emergency Events section
-- beep.mp3 sound on violation, siren.mp3 on accident/collision
-- Image display using BASE_URL + record.image field
+- Auto-refresh interval (3s) to LiveViolationsPage (was manual-only)
+- Emergency popup trigger from `/api/emergency` endpoint in loadEmergencies
 
 ### Modify
-- Popup: trigger ONLY ONCE when total score >= 5, using localStorage to prevent re-trigger; include vehicle number, alert message, View Challan / Pay Now / Close buttons; fix Close button
-- Camera label: use ONLY "Inside Camera" (remove any outside camera references)
-- Violation table: filter to category = "VIOLATION" only
-- Emergency Events section: filter to category = "EVENT" only
-- Fetch interval: every 2 seconds with ?t=timestamp cache-busting param
+- CameraCard: switched from `<img>` to `<iframe>` for ESP stream; status now shows ONLINE (on iframe load) / OFFLINE (on error/timeout)
+- Polling interval: changed from 4000ms to 3000ms for both violations and emergency fetches
+- CenterAlertPopup: emergency alert title changed to "🚨 Emergency Detected – Authorities Notified" for both accident and collision types
+- sounds.ts: references local `/beep.mp3` and `/siren.mp3` first, CDN as fallback
+- LiveViolationsPage: removed manual Refresh Data button; auto-refresh via useInterval every 3s
+- Image URLs: consistently using `BASE + record.image` (v.path || v.image) throughout
 
 ### Remove
-- Any remaining outside/road camera references or labels
-- Old score/category filtering logic that doesn't match new category field
+- Manual "Refresh Data" button from LiveViolationsPage
+- Old ACTIVE/STANDBY camera status labels (replaced with ONLINE/OFFLINE)
 
 ## Implementation Plan
-1. Update api.ts: add resetSession(), update fetchViolations() with timestamp cache-bust, normalize category field
-2. Update DashboardPage: call resetSession on mount, filter violations by category, wire camera pause/resume on violation + tab focus
-3. Update CameraCard: label shows only "Inside Camera", expose pause/resume ref methods
-4. Update sound system: use beep.mp3 for VIOLATION category, siren.mp3 for EVENT/accident category
-5. Update popup: score >= 5 trigger once via localStorage key, fix Close handler, ensure all 3 buttons work
-6. Update EmergencyEvents: filter by category = "EVENT" strictly
-7. Image rendering: always use BASE_URL + record.image
+1. Update CameraCard to iframe-based streaming with ONLINE/OFFLINE status
+2. Change polling from 4s to 3s everywhere
+3. Update emergency popup message in CenterAlertPopup
+4. Update sounds.ts to use local beep.mp3/siren.mp3 with CDN fallback
+5. Add per-event popup tracking in loadEmergencies
+6. Remove manual refresh from LiveViolationsPage, add useInterval
