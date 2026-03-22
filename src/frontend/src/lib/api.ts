@@ -17,6 +17,7 @@ interface NodeViolation {
   lng?: number;
   category?: string; // "VIOLATION" | "EVENT"
   image?: string; // raw image path from backend
+  location?: string; // location string from backend
 }
 
 export type { NodeViolation };
@@ -151,7 +152,9 @@ export function normalizeViolation(raw: any): NodeViolation {
     lat: raw.lat != null ? Number(raw.lat) : undefined,
     lng: raw.lng != null ? Number(raw.lng) : undefined,
     category: raw.category,
-    image: raw.image || raw.path || raw.imageUrl || raw.evidence || undefined,
+    location: raw.location || undefined,
+    // Keep image as raw path so callers can do BASE + record.image
+    image: raw.path || raw.image || undefined,
   };
 }
 

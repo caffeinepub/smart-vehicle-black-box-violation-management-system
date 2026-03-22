@@ -41,6 +41,8 @@ import {
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 
+const BASE = "https://vehicle-blackbox-system-1.onrender.com";
+
 const DEFAULT_OWNER = "Mark";
 const DEFAULT_MOBILE = "+91 8520649127";
 
@@ -560,7 +562,9 @@ export default function LiveViolationsPage() {
                       {} as Record<string, number>,
                     );
                     return sortedViolations.map((v, index) => {
-                      const imageUrl = normalizeImageUrl(v.imageUrl);
+                      const imageUrl = v.image
+                        ? `${BASE}${v.image}`
+                        : normalizeImageUrl(v.imageUrl);
                       const vehicleScore =
                         vehicleScoreMap.get(v.vehicleNo) ?? 0;
                       const isPaidVehicle = paidVehicles.has(v.vehicleNo);

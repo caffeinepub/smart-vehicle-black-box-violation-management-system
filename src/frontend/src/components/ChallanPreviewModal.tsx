@@ -112,6 +112,7 @@ async function generatePDF(
   violationCount: number,
   isMultipleViolationCase: boolean,
   evidenceImages: string[] = [],
+  individualViolations?: import("@/lib/api").NodeViolation[],
 ) {
   // Load jsPDF from CDN
   if (!(window as any).jspdf) {
@@ -132,6 +133,22 @@ async function generatePDF(
   const MARGIN = 15;
   const CONTENT_W = PAGE_W - MARGIN * 2;
   let y = 0;
+
+  // Try to load logo from backend
+  const logoBase64 = await imageToBase64(
+    "https://vehicle-blackbox-system-1.onrender.com/logo.png",
+  ).catch(() => null);
+
+  // Kerala Police / MVD Logo at top
+  const mvdLogoBase64 = await imageToBase64(
+    "https://upload.wikimedia.org/wikipedia/commons/7/7b/Kerala_Police_Logo.png",
+  ).catch(() => null);
+  if (mvdLogoBase64) {
+    try {
+      doc.addImage(mvdLogoBase64, "PNG", (PAGE_W - 25) / 2, 1, 25, 25);
+    } catch {}
+    y = 30;
+  }
 
   // Header band
   doc.setFillColor(11, 11, 96);
@@ -157,6 +174,12 @@ async function generatePDF(
     32,
     { align: "center" },
   );
+
+  if (logoBase64) {
+    try {
+      doc.addImage(logoBase64, "PNG", MARGIN, 5, 20, 20);
+    } catch {}
+  }
 
   y = 45;
 
@@ -219,18 +242,35 @@ async function generatePDF(
   doc.setFontSize(8.5);
   doc.setTextColor(30, 30, 30);
   doc.text("Violation Type", MARGIN + 2, y + 5);
-  doc.text("Count", MARGIN + 80, y + 5);
   doc.text("Score", MARGIN + 105, y + 5);
   doc.text("Fine (₹)", MARGIN + 135, y + 5);
   y += 10;
 
+  // Use individual violation rows if provided, otherwise fall back to grouped
+  const tableRows: { type: string; score: number; fine: number }[] =
+    individualViolations && individualViolations.length > 0
+      ? individualViolations.map((v) => ({
+          type: v.violationType || "",
+          score: v.score,
+          fine: v.score * 1000,
+        }))
+      : grouped.flatMap((g) =>
+          Array(g.count)
+            .fill(null)
+            .map(() => ({
+              type: g.violationType,
+              score: g.totalScore / g.count,
+              fine: (g.totalScore / g.count) * 1000,
+            })),
+        );
+
+  // Rebuild table header for individual rows (Type | Score | Fine)
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
-  for (const g of grouped) {
-    doc.text(g.violationType, MARGIN + 2, y);
-    doc.text(String(g.count), MARGIN + 80, y);
-    doc.text(String(g.totalScore), MARGIN + 105, y);
-    doc.text((g.totalScore * 1000).toLocaleString("en-IN"), MARGIN + 135, y);
+  for (const row of tableRows) {
+    doc.text(row.type, MARGIN + 2, y);
+    doc.text(String(row.score), MARGIN + 105, y);
+    doc.text(Math.round(row.fine).toLocaleString("en-IN"), MARGIN + 135, y);
     y += 6;
   }
 
@@ -346,10 +386,12 @@ export default function ChallanPreviewModal({
 
   const grouped = groupViolationsByType(relevantViolations);
 
-  const evidenceImage = [...relevantViolations]
+  const _latestWithImage = [...relevantViolations]
     .reverse()
-    .find((v) => v.imageUrl)?.imageUrl;
-  const evidenceImageUrl = normalizeImageUrl(evidenceImage);
+    .find((v) => v.image || v.imageUrl);
+  const evidenceImageUrl = _latestWithImage?.image
+    ? `https://vehicle-blackbox-system-1.onrender.com${_latestWithImage.image}`
+    : normalizeImageUrl(_latestWithImage?.imageUrl);
 
   const issueDate = formatIssueDateOnly(new Date());
   const challanNo = `SMVB-${Date.now().toString().slice(-8)}`;
@@ -358,7 +400,11 @@ export default function ChallanPreviewModal({
     setIsGenerating(true);
     try {
       const evidenceImages = relevantViolations
-        .map((v) => normalizeImageUrl(v.imageUrl))
+        .map((v) => {
+          if (v.image)
+            return `https://vehicle-blackbox-system-1.onrender.com${v.image}`;
+          return v.imageUrl || "";
+        })
         .filter(Boolean) as string[];
       await generatePDF(
         effectiveVehicleNo,
@@ -375,6 +421,7 @@ export default function ChallanPreviewModal({
         relevantViolations.length,
         isMultipleViolationCase,
         evidenceImages,
+        relevantViolations,
       );
     } finally {
       setIsGenerating(false);
@@ -525,7 +572,9 @@ export default function ChallanPreviewModal({
                   Location
                 </p>
                 <p className="text-xs" style={{ color: "#374151" }}>
-                  {location}
+                  {firstViolation?.location
+                    ? `📍 ${firstViolation.location} (${firstViolation.lat ?? "—"}, ${firstViolation.lng ?? "—"})`
+                    : location}
                 </p>
               </div>
             </div>

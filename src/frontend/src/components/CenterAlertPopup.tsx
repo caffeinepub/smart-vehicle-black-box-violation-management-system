@@ -19,7 +19,7 @@ const ALERT_CONFIG = {
   multipleViolation: {
     headerBg: "#dc2626",
     icon: AlertTriangle,
-    title: "⚠ Multiple Violations Detected. Challan Generated.",
+    title: "⚠ Multiple Violations Detected",
     lines: (vehicleNo?: string) =>
       [
         vehicleNo ? `Vehicle Number: ${vehicleNo}` : null,

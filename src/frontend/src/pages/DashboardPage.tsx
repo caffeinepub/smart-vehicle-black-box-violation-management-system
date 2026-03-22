@@ -63,6 +63,8 @@ import {
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
 
+const BASE = "https://vehicle-blackbox-system-1.onrender.com";
+
 // Score mapping
 const VIOLATION_SCORE_MAP: Record<string, number> = {
   Seatbelt: 1,
@@ -370,13 +372,6 @@ const CameraCard = React.memo(function CameraCard({
   );
 });
 
-function getLastShownChallanId(): string {
-  return localStorage.getItem("lastShownChallanId") || "";
-}
-function setLastShownChallanId(id: string): void {
-  localStorage.setItem("lastShownChallanId", id);
-}
-
 // Module-level set — survives re-renders without causing them.
 // Keys added here prevent the popup from re-opening after user closes it.
 const _suppressedPopupKeys = new Set<string>();
@@ -496,6 +491,11 @@ export default function DashboardPage() {
                 dateTime: raw.dateTime || raw.time || raw.timestamp || "",
                 imageUrl:
                   raw.imageUrl ||
+                  (raw.image
+                    ? raw.image.startsWith("http")
+                      ? raw.image
+                      : `https://vehicle-blackbox-system-1.onrender.com${raw.image}`
+                    : undefined) ||
                   (raw.evidence ? String(raw.evidence) : undefined),
                 score: 0,
                 fine: 0,
@@ -608,20 +608,23 @@ export default function DashboardPage() {
                   vehicleNo: latest.vehicleNo,
                 });
               }
-            } else if (get12HourScore(data) >= CHALLAN_THRESHOLD) {
-              // Trigger popup ONLY ONCE — tracked via ref + localStorage
-              const alreadyShown =
-                localStorage.getItem(POPUP_SHOWN_KEY) === "true" ||
-                popupShownRef.current;
-              if (!alreadyShown) {
-                popupShownRef.current = true;
-                localStorage.setItem(POPUP_SHOWN_KEY, "true");
-                playAlarmSound();
-                setCenterAlert({
-                  type: "multipleViolation",
-                  vehicleNo: latest.vehicleNo,
-                  totalScore: get12HourScore(data),
-                });
+            } else {
+              // Per-group popup tracking — show once per completed group
+              const paidIds = getPaidGroupIds();
+              const groups = buildViolationGroups(data, paidIds);
+              for (const g of groups) {
+                if (g.isComplete && !_suppressedPopupKeys.has(g.groupId)) {
+                  // Add to suppressed BEFORE showing to prevent re-trigger
+                  _suppressedPopupKeys.add(g.groupId);
+                  playAlarmSound();
+                  setCenterAlert({
+                    type: "multipleViolation",
+                    vehicleNo: latest.vehicleNo,
+                    groupId: g.groupId,
+                    totalScore: g.totalScore,
+                  });
+                  break; // show one popup at a time
+                }
               }
             }
           }
@@ -724,8 +727,8 @@ export default function DashboardPage() {
             const paidIds = getPaidGroupIds();
             const groups = buildViolationGroups(next, paidIds);
             for (const g of groups) {
-              if (g.isComplete && getLastShownChallanId() !== g.groupId) {
-                setLastShownChallanId(g.groupId);
+              if (g.isComplete && !_suppressedPopupKeys.has(g.groupId)) {
+                _suppressedPopupKeys.add(g.groupId);
                 playAlarmSound();
                 setCenterAlert({
                   type: "multipleViolation",
@@ -1031,10 +1034,7 @@ export default function DashboardPage() {
           vehicleNo={centerAlert.vehicleNo}
           totalScore={centerAlert.totalScore}
           onClose={() => {
-            if (centerAlert) {
-              const alertKey = `${centerAlert.type}-${centerAlert.vehicleNo || ""}-${centerAlert.totalScore ?? ""}`;
-              _suppressedPopupKeys.add(alertKey);
-            }
+            // Key already added to _suppressedPopupKeys before popup was shown
             setCenterAlert(null);
           }}
           onViewChallan={
@@ -1057,7 +1057,11 @@ export default function DashboardPage() {
                 }
               : undefined
           }
-          imageUrl={emergencyViolation?.imageUrl}
+          imageUrl={
+            emergencyViolation?.image
+              ? `${BASE}${emergencyViolation.image}`
+              : emergencyViolation?.imageUrl
+          }
           locationStr={
             emergencyViolation?.lat && emergencyViolation?.lng
               ? `N ${emergencyViolation.lat} / E ${emergencyViolation.lng}`
@@ -1482,7 +1486,9 @@ export default function DashboardPage() {
                       <tbody>
                         {group.violations.map((v, vIdx) => {
                           const inside = isInsideCamViolation(v.violationType);
-                          const imgUrl = normalizeImageUrl(v.imageUrl);
+                          const imgUrl = v.image
+                            ? `${BASE}${v.image}`
+                            : normalizeImageUrl(v.imageUrl);
                           return (
                             <tr
                               key={`${group.groupId}-v${vIdx}`}
@@ -1777,7 +1783,9 @@ export default function DashboardPage() {
                 </TableHeader>
                 <TableBody>
                   {tableViolations.map((violation, index) => {
-                    const imageUrl = normalizeImageUrl(violation.imageUrl);
+                    const imageUrl = violation.image
+                      ? `${BASE}${violation.image}`
+                      : normalizeImageUrl(violation.imageUrl);
                     const vehicleScore =
                       vehicleScoreMap.get(violation.vehicleNo) ?? 0;
                     const isPaidVehicle = paidVehicles.has(violation.vehicleNo);
@@ -1956,10 +1964,6 @@ export default function DashboardPage() {
               const driverImg = normalizeImageUrl(
                 (ev as NodeViolation & { driverImage?: string }).driverImage,
               );
-              const outsideImg = normalizeImageUrl(
-                (ev as NodeViolation & { outsideImage?: string })
-                  .outsideImage || ev.imageUrl,
-              );
               return (
                 <div
                   key={`${ev.vehicleNo}-${ev.timestamp}-${idx}`}
@@ -1995,6 +1999,14 @@ export default function DashboardPage() {
                     >
                       {getViolationDateTime(ev)}
                     </p>
+                    {ev.location && (
+                      <p
+                        className="text-xs font-semibold"
+                        style={{ color: "#374151" }}
+                      >
+                        📍 {ev.location}
+                      </p>
+                    )}
                     {(() => {
                       const emergencyLat =
                         ev.lat != null && ev.lat !== 0 ? ev.lat : 12.0978888;
@@ -2024,47 +2036,20 @@ export default function DashboardPage() {
                         </div>
                       );
                     })()}
-                    {(driverImg || outsideImg) && (
-                      <div className="flex gap-2 mt-2">
-                        {driverImg && (
-                          <div>
-                            <p
-                              className="text-xs mb-1"
-                              style={{ color: "#6b7280" }}
-                            >
-                              Driver
-                            </p>
-                            <img
-                              src={driverImg}
-                              alt="Driver"
-                              className="w-20 h-14 object-cover rounded"
-                              style={{ border: "1px solid #e2e8f0" }}
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
-                            />
-                          </div>
-                        )}
-                        {outsideImg && (
-                          <div>
-                            <p
-                              className="text-xs mb-1"
-                              style={{ color: "#6b7280" }}
-                            >
-                              Outside
-                            </p>
-                            <img
-                              src={outsideImg}
-                              alt="Outside camera"
-                              className="w-20 h-14 object-cover rounded"
-                              style={{ border: "1px solid #e2e8f0" }}
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
+                    {(ev.image || ev.imageUrl || driverImg) && (
+                      <img
+                        src={
+                          ev.image
+                            ? `${BASE}${ev.image}`
+                            : ev.imageUrl || driverImg
+                        }
+                        alt="Evidence"
+                        className="w-full h-24 object-cover rounded mt-2"
+                        style={{ border: "1px solid #e2e8f0" }}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                        }}
+                      />
                     )}
                   </div>
                 </div>
