@@ -12,6 +12,7 @@ interface CenterAlertPopupProps {
   onPayNow?: () => void;
   imageUrl?: string;
   locationStr?: string;
+  totalScore?: number;
 }
 
 const ALERT_CONFIG = {
@@ -62,6 +63,7 @@ export default function CenterAlertPopup({
   onPayNow,
   imageUrl,
   locationStr,
+  totalScore,
 }: CenterAlertPopupProps) {
   if (!open) return null;
 
@@ -105,6 +107,11 @@ export default function CenterAlertPopup({
               style={{ color: "#0B0B60" }}
             >
               {vehicleNo}
+            </p>
+          )}
+          {type === "multipleViolation" && totalScore !== undefined && (
+            <p className="text-sm font-semibold" style={{ color: "#374151" }}>
+              Total Score: {totalScore}
             </p>
           )}
           {lines.map((line, i) => (

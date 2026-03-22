@@ -18,6 +18,7 @@ import {
 import { useInterval } from "@/hooks/useInterval";
 import {
   type NodeViolation,
+  fetchAccidents,
   fetchScore,
   fetchStats,
   fetchVehicleScore,
@@ -51,6 +52,7 @@ import {
   FileText,
   Loader2,
   MapPin,
+  RotateCcw,
   Shield,
   Siren,
   TrendingUp,
@@ -105,15 +107,6 @@ function buildVehicleScoreMap(
     map.set(v.vehicleNo, (map.get(v.vehicleNo) ?? 0) + v.score);
   }
   return map;
-}
-
-function getVehicleTotalFine(
-  vehicleNo: string,
-  violations: NodeViolation[],
-): number {
-  return violations
-    .filter((v) => v.vehicleNo === vehicleNo)
-    .reduce((sum, v) => sum + getViolationFine(v), 0);
 }
 
 function get12HourScore(violations: NodeViolation[]): number {
@@ -226,9 +219,9 @@ function getRiskLevel(score: number): {
   bg: string;
   border: string;
 } {
-  if (score <= 3)
+  if (score <= 4)
     return { label: "LOW", color: "#16a34a", bg: "#dcfce7", border: "#bbf7d0" };
-  if (score <= 7)
+  if (score <= 9)
     return {
       label: "MEDIUM",
       color: "#f97316",
@@ -238,7 +231,7 @@ function getRiskLevel(score: number): {
   return { label: "HIGH", color: "#dc2626", bg: "#fee2e2", border: "#fecaca" };
 }
 
-function CameraCard({
+const CameraCard = React.memo(function CameraCard({
   label,
   streamSrc,
 }: {
@@ -252,16 +245,14 @@ function CameraCard({
 
   React.useEffect(() => {
     if (streamSrc) {
-      setStatus("loading");
+      // FIX: MJPEG streams never fire onLoad; set active immediately and rely on onError for failure
+      setStatus("online");
       if (imgRef.current) {
         imgRef.current.src = streamSrc;
       }
-      const timer = setTimeout(() => {
-        setStatus((prev) => (prev === "loading" ? "offline" : prev));
-      }, 5000);
-      return () => clearTimeout(timer);
+    } else {
+      setStatus("waiting");
     }
-    setStatus("waiting");
   }, [streamSrc]);
 
   return (
@@ -324,9 +315,8 @@ function CameraCard({
           alt={label}
           style={{
             width: "100%",
-            display: status === "online" ? "block" : "none",
+            display: "block",
           }}
-          onLoad={() => setStatus("online")}
           onError={() => setStatus("offline")}
         />
         {(status === "offline" || status === "waiting") && (
@@ -351,7 +341,7 @@ function CameraCard({
               }}
             >
               {status === "offline"
-                ? "Camera temporarily unavailable"
+                ? "Connect to vehicle WiFi to view camera"
                 : "Loading camera stream..."}
             </p>
           </div>
@@ -377,7 +367,18 @@ function CameraCard({
       </div>
     </div>
   );
+});
+
+function getLastShownChallanId(): string {
+  return localStorage.getItem("lastShownChallanId") || "";
 }
+function setLastShownChallanId(id: string): void {
+  localStorage.setItem("lastShownChallanId", id);
+}
+
+// Module-level set — survives re-renders without causing them.
+// Keys added here prevent the popup from re-opening after user closes it.
+const _suppressedPopupKeys = new Set<string>();
 
 export default function DashboardPage() {
   const [violations, setViolations] = useState<NodeViolation[]>([]);
@@ -405,6 +406,7 @@ export default function DashboardPage() {
     type: AlertType;
     vehicleNo?: string;
     groupId?: string;
+    totalScore?: number;
   } | null>(null);
 
   const previousViolationsRef = useRef<Set<string>>(new Set());
@@ -415,7 +417,7 @@ export default function DashboardPage() {
   } | null>(null);
   const multipleAlertShownRef = useRef<boolean>(false);
   const _emergencyAlertShownIdsRef = useRef<Set<string>>(new Set());
-  const shownGroupAlertsRef = useRef<Set<string>>(new Set());
+  const _shownGroupAlertsRef = useRef<Set<string>>(new Set());
   const shownEmergencyAlertsRef = useRef<Set<string>>(new Set());
   // Tracks the timestamp of the last violation we showed a popup for
   // (prevents repeated popups on every 3s poll for the same latest record)
@@ -423,6 +425,7 @@ export default function DashboardPage() {
   const [emergencyEvents, setEmergencyEvents] = useState<NodeViolation[]>([]);
   const [emergencyViolation, setEmergencyViolation] =
     useState<NodeViolation | null>(null);
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
@@ -430,32 +433,63 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // Fetch dynamic stream URL once on mount — prevents reload/flicker
+  useEffect(() => {
+    const API_BASE_URL = "https://vehicle-blackbox-system-1.onrender.com";
+    fetch(`${API_BASE_URL}/stream`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.stream) setStreamUrl(d.stream);
+        else setStreamUrl("http://192.168.153.206/stream");
+      })
+      .catch(() => setStreamUrl("http://192.168.153.206/stream"));
+  }, []);
+
   // Derived: violation groups
   const violationGroups = buildViolationGroups(violations, paidGroupIds);
 
   const loadEmergencies = () => {
-    const API_BASE = "https://vehicle-blackbox-system-1.onrender.com";
-    fetch(`${API_BASE}/emergencies`)
-      .then((res) => res.json())
-      .then((arr: any[]) => {
-        const data: NodeViolation[] = arr.map((raw: any) => ({
-          vehicleNo: raw.vehicleNo || raw.vehicle || "",
-          violationType: raw.violationType || raw.type || "",
-          timestamp: raw.dateTime || raw.time || raw.timestamp || "",
-          dateTime: raw.dateTime || raw.time || raw.timestamp || "",
-          imageUrl:
-            raw.imageUrl || (raw.evidence ? `${raw.evidence}` : undefined),
-          score: Number(raw.score) || 0,
-          fine: raw.fine != null ? Number(raw.fine) : 0,
-          fineAmount: Number(raw.fine) || 0,
-          lat: raw.lat != null ? Number(raw.lat) : undefined,
-          lng: raw.lng != null ? Number(raw.lng) : undefined,
-          ownerName: raw.ownerName || raw.owner || "Mark",
-          mobile: raw.mobile || "+91 8520649127",
-        }));
-        setEmergencyEvents(data);
-      })
-      .catch(() => {});
+    // Fetch from both /api/events and /api/accidents, merge results
+    Promise.all([
+      fetchAccidents().catch(() => [] as NodeViolation[]),
+      fetch("https://vehicle-blackbox-system-1.onrender.com/api/events")
+        .then((r) => r.json())
+        .then((arr: any[]) =>
+          arr.map(
+            (raw: any) =>
+              ({
+                vehicleNo: raw.vehicleNo || raw.vehicle || "",
+                violationType: raw.violationType || raw.type || "",
+                timestamp: raw.dateTime || raw.time || raw.timestamp || "",
+                dateTime: raw.dateTime || raw.time || raw.timestamp || "",
+                imageUrl:
+                  raw.imageUrl ||
+                  (raw.evidence ? String(raw.evidence) : undefined),
+                score: 0,
+                fine: 0,
+                fineAmount: 0,
+                lat: raw.lat != null ? Number(raw.lat) : undefined,
+                lng: raw.lng != null ? Number(raw.lng) : undefined,
+                ownerName: raw.ownerName || raw.owner || "Mark",
+                mobile: raw.mobile || "+91 8520649127",
+              }) as NodeViolation,
+          ),
+        )
+        .catch(() => [] as NodeViolation[]),
+    ]).then(([accidents, events]) => {
+      // Merge and deduplicate by timestamp+vehicleNo
+      const seen = new Set<string>();
+      const merged: NodeViolation[] = [];
+      for (const ev of [...accidents, ...events]) {
+        const key = `${ev.vehicleNo}-${ev.timestamp}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          // Ensure score=0 for emergency events (not counted in violations)
+          merged.push({ ...ev, score: 0, fine: 0 });
+        }
+      }
+      setEmergencyEvents(merged);
+    });
   };
 
   const loadData = () => {
@@ -475,6 +509,7 @@ export default function DashboardPage() {
               // Emergency events — play alarm; popup handled by center alert logic below
               playEmergencyAlarm();
             } else {
+              playViolationBeep();
               showNotification(
                 "Traffic Violation Detected",
                 "alert",
@@ -539,23 +574,21 @@ export default function DashboardPage() {
                 });
               }
             } else if (get12HourScore(data) >= CHALLAN_THRESHOLD) {
-              const key = `multiple-${latestTime}`;
-              if (!shownGroupAlertsRef.current.has(key)) {
-                shownGroupAlertsRef.current.add(key);
+              const challanKey = `challan-${latest.vehicleNo}-${latestTime}`;
+              const alertKey = `multipleViolation-${latest.vehicleNo}-${get12HourScore(data)}`;
+              // Only show if not already suppressed by user closing it AND not already shown for this challan
+              if (
+                !_suppressedPopupKeys.has(alertKey) &&
+                getLastShownChallanId() !== challanKey
+              ) {
+                setLastShownChallanId(challanKey);
                 playAlarmSound();
-                const nonEmergencyCurrentViolations = data.filter((v) => {
-                  const t = (v.violationType || "").toLowerCase();
-                  return t !== "accident" && t !== "collision";
-                });
                 setCenterAlert({
                   type: "multipleViolation",
                   vehicleNo: latest.vehicleNo,
+                  totalScore: get12HourScore(data),
                 });
-                handleViewChallan(
-                  latest.vehicleNo,
-                  nonEmergencyCurrentViolations,
-                );
-                setApiTotalScore(0); // reset displayed score after challan generation
+                // NOTE: Do NOT call handleViewChallan() here — user opens manually via popup button
               }
             }
           }
@@ -658,15 +691,16 @@ export default function DashboardPage() {
             const paidIds = getPaidGroupIds();
             const groups = buildViolationGroups(next, paidIds);
             for (const g of groups) {
-              if (g.isComplete && !shownGroupAlertsRef.current.has(g.groupId)) {
-                shownGroupAlertsRef.current.add(g.groupId);
+              if (g.isComplete && getLastShownChallanId() !== g.groupId) {
+                setLastShownChallanId(g.groupId);
                 playAlarmSound();
                 setCenterAlert({
                   type: "multipleViolation",
                   vehicleNo: v.vehicleNo,
                   groupId: g.groupId,
+                  totalScore: get12HourScore([v, ...prev]),
                 });
-                setApiTotalScore(0); // reset displayed score; backend will confirm on next poll
+                // FIX: do not reset score to 0; backend will confirm updated score on next poll
                 if (
                   "Notification" in window &&
                   Notification.permission === "granted"
@@ -737,7 +771,7 @@ export default function DashboardPage() {
       v.violationType?.toLowerCase().includes("accident") ||
       v.violationType?.toLowerCase().includes("collision"),
   ).length;
-  const totalFineCollected = nonEmergencyViolations.reduce(
+  const _totalFineCollected = nonEmergencyViolations.reduce(
     (sum, v) => sum + (Number(getViolationFine(v)) || 0),
     0,
   );
@@ -773,7 +807,7 @@ export default function DashboardPage() {
   const statCards = [
     {
       label: "Total Violations",
-      value: loading ? "—" : String(totalViolations),
+      value: loading && violations.length === 0 ? "—" : String(totalViolations),
       icon: Activity,
       accent: "#3b82f6",
       ocid: "dashboard.total_violations.card",
@@ -781,7 +815,7 @@ export default function DashboardPage() {
     },
     {
       label: "Vehicles Flagged",
-      value: loading ? "—" : String(flaggedVehicles),
+      value: loading && violations.length === 0 ? "—" : String(flaggedVehicles),
       icon: Car,
       accent: "#f97316",
       ocid: "dashboard.vehicles_flagged.card",
@@ -789,7 +823,8 @@ export default function DashboardPage() {
     },
     {
       label: "Total Score",
-      value: loading ? "—" : String(effectiveTotalScore),
+      value:
+        loading && violations.length === 0 ? "—" : String(effectiveTotalScore),
       icon: TrendingUp,
       accent: effectiveTotalScore >= CHALLAN_THRESHOLD ? "#ef4444" : "#64748b",
       ocid: "dashboard.total_score.card",
@@ -797,7 +832,10 @@ export default function DashboardPage() {
     },
     {
       label: "Total Fine Collected",
-      value: loading ? "—" : `₹${totalFineCollected.toLocaleString("en-IN")}`,
+      value:
+        loading && violations.length === 0
+          ? "—"
+          : `₹${(effectiveTotalScore * 1000).toLocaleString("en-IN")}`,
       icon: CreditCard,
       accent: "#22c55e",
       ocid: "dashboard.total_fine.card",
@@ -805,7 +843,7 @@ export default function DashboardPage() {
     },
     {
       label: "Accident Alerts",
-      value: loading ? "—" : String(accidentCount),
+      value: loading && violations.length === 0 ? "—" : String(accidentCount),
       icon: AlertCircle,
       accent: "#ef4444",
       ocid: "dashboard.accident_alerts.card",
@@ -832,16 +870,35 @@ export default function DashboardPage() {
     setPaidGroupIds(getPaidGroupIds());
   };
 
-  const challanVehicleFine = challanGroupViolations
-    ? challanGroupViolations.reduce((s, v) => s + getViolationFine(v), 0)
-    : challanVehicleNo
-      ? getVehicleTotalFine(challanVehicleNo, violations)
-      : 0;
   const challanVehicleScore = challanGroupViolations
     ? challanGroupViolations.reduce((s, v) => s + v.score, 0)
     : challanVehicleNo
       ? (vehicleScoreMap.get(challanVehicleNo) ?? 0)
       : 0;
+  const challanVehicleFine = challanVehicleScore * 1000;
+
+  const handleResetData = () => {
+    if (
+      !window.confirm(
+        "Reset all local data? Payment statuses and popup history will be cleared.",
+      )
+    )
+      return;
+    localStorage.removeItem("lastShownChallanId");
+    localStorage.removeItem("paidViolationGroups");
+    setPaidGroupIds(new Set());
+    setApiTotalScore(0);
+    setViolations([]);
+    setEmergencyEvents([]);
+    setCenterAlert(null);
+    lastSeenViolationTimeRef.current = "";
+    previousViolationsRef.current = new Set();
+    notifiedThresholdRef.current = false;
+    multipleAlertShownRef.current = false;
+    _emergencyAlertShownIdsRef.current = new Set();
+    _shownGroupAlertsRef.current = new Set();
+    shownEmergencyAlertsRef.current = new Set();
+  };
 
   return (
     <div className="space-y-8">
@@ -921,7 +978,14 @@ export default function DashboardPage() {
           open={!!centerAlert}
           type={centerAlert.type}
           vehicleNo={centerAlert.vehicleNo}
-          onClose={() => setCenterAlert(null)}
+          totalScore={centerAlert.totalScore}
+          onClose={() => {
+            if (centerAlert) {
+              const alertKey = `${centerAlert.type}-${centerAlert.vehicleNo || ""}-${centerAlert.totalScore ?? ""}`;
+              _suppressedPopupKeys.add(alertKey);
+            }
+            setCenterAlert(null);
+          }}
           onViewChallan={
             centerAlert.type === "multipleViolation" && centerAlert.vehicleNo
               ? () => {
@@ -973,6 +1037,19 @@ export default function DashboardPage() {
           traffic violations, generates challans automatically, and forwards
           repeat offenders to RTO authorities. Data updates every 3 seconds.
         </p>
+        <div className="mt-3">
+          <Button
+            data-ocid="dashboard.reset_data.button"
+            variant="outline"
+            size="sm"
+            onClick={handleResetData}
+            className="text-xs gap-1.5"
+            style={{ borderColor: "#d1d5db", color: "#6b7280" }}
+          >
+            <RotateCcw className="w-3 h-3" />
+            Reset Data
+          </Button>
+        </div>
       </div>
 
       {/* SECTION 1: Vehicle Monitoring */}
@@ -989,7 +1066,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-4">
           <CameraCard
             label="Driver Camera (Inside Camera)"
-            streamSrc="http://192.168.153.206/stream"
+            streamSrc={streamUrl}
           />
         </div>
       </section>
@@ -2061,7 +2138,7 @@ export default function DashboardPage() {
         challanId={`SMVB-${Date.now().toString().slice(-8)}`}
         totalFine={
           paymentVehicleNo
-            ? getVehicleTotalFine(paymentVehicleNo, violations)
+            ? (vehicleScoreMap.get(paymentVehicleNo) ?? 0) * 1000
             : 0
         }
         groupId={paymentGroupId}

@@ -82,11 +82,26 @@ function groupViolationsByType(
   return Array.from(map.values());
 }
 
+async function imageToBase64(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 async function generatePDF(
   vehicleNo: string,
   grouped: GroupedViolation[],
   totalScore: number,
-  totalFine: number,
+  _totalFine: number,
   isPaid: boolean,
   ownerName: string,
   ownerMobile: string,
@@ -96,6 +111,7 @@ async function generatePDF(
   challanNo: string,
   violationCount: number,
   isMultipleViolationCase: boolean,
+  evidenceImages: string[] = [],
 ) {
   // Load jsPDF from CDN
   if (!(window as any).jspdf) {
@@ -214,7 +230,7 @@ async function generatePDF(
     doc.text(g.violationType, MARGIN + 2, y);
     doc.text(String(g.count), MARGIN + 80, y);
     doc.text(String(g.totalScore), MARGIN + 105, y);
-    doc.text(g.totalFine.toLocaleString("en-IN"), MARGIN + 135, y);
+    doc.text((g.totalScore * 1000).toLocaleString("en-IN"), MARGIN + 135, y);
     y += 6;
   }
 
@@ -230,8 +246,45 @@ async function generatePDF(
   y += 6;
   doc.setTextColor(220, 38, 38);
   doc.setFontSize(11);
-  doc.text(`Total Fine: ₹${totalFine.toLocaleString("en-IN")}`, MARGIN + 70, y);
+  doc.text(
+    `Total Fine: ₹${(totalScore * 1000).toLocaleString("en-IN")}`,
+    MARGIN + 70,
+    y,
+  );
   y += 12;
+
+  // Evidence Images
+  if (evidenceImages.length > 0) {
+    y += 4;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(30, 30, 30);
+    doc.text("Evidence Images", MARGIN, y);
+    y += 6;
+    for (const imgUrl of evidenceImages) {
+      const b64 = await imageToBase64(imgUrl);
+      if (b64) {
+        if (y > 240) {
+          doc.addPage();
+          y = 20;
+        }
+        try {
+          doc.addImage(b64, "JPEG", MARGIN, y, 80, 60);
+          y += 65;
+        } catch {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.text("No Image Available", MARGIN, y);
+          y += 8;
+        }
+      } else {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.text("No Image Available", MARGIN, y);
+        y += 8;
+      }
+    }
+  }
 
   // Footer
   doc.setTextColor(100, 100, 120);
@@ -304,6 +357,9 @@ export default function ChallanPreviewModal({
   const handleDownloadPDF = async () => {
     setIsGenerating(true);
     try {
+      const evidenceImages = relevantViolations
+        .map((v) => normalizeImageUrl(v.imageUrl))
+        .filter(Boolean) as string[];
       await generatePDF(
         effectiveVehicleNo,
         grouped,
@@ -318,6 +374,7 @@ export default function ChallanPreviewModal({
         challanNo,
         relevantViolations.length,
         isMultipleViolationCase,
+        evidenceImages,
       );
     } finally {
       setIsGenerating(false);
@@ -560,7 +617,7 @@ export default function ChallanPreviewModal({
                       className="px-4 py-2 text-right font-bold"
                       style={{ color: "#dc2626" }}
                     >
-                      ₹{g.totalFine.toLocaleString("en-IN")}
+                      ₹{(g.totalScore * 1000).toLocaleString("en-IN")}
                     </td>
                   </tr>
                 ))}
@@ -589,7 +646,7 @@ export default function ChallanPreviewModal({
                     className="px-4 py-2 text-right font-black text-base"
                     style={{ color: "#dc2626" }}
                   >
-                    ₹{totalFine.toLocaleString("en-IN")}
+                    ₹{(totalScore * 1000).toLocaleString("en-IN")}
                   </td>
                 </tr>
               </tfoot>

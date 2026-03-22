@@ -71,15 +71,6 @@ function buildVehicleScoreMap(
   return map;
 }
 
-function getVehicleTotalFine(
-  vehicleNo: string,
-  violations: NodeViolation[],
-): number {
-  return violations
-    .filter((v) => v.vehicleNo === vehicleNo)
-    .reduce((sum, v) => sum + getViolationFine(v), 0);
-}
-
 function getStatusBadge(
   vehicleScore: number,
   isPaid: boolean,
@@ -822,7 +813,7 @@ export default function LiveViolationsPage() {
         violations={violations}
         vehicleNo={challanVehicleNo}
         totalScore={vehicleScoreMap.get(challanVehicleNo) ?? 0}
-        totalFine={getVehicleTotalFine(challanVehicleNo, violations)}
+        totalFine={(vehicleScoreMap.get(challanVehicleNo) ?? 0) * 1000}
         isPaid={paidVehicles.has(challanVehicleNo)}
         groupViolations={challanGroupViolations}
       />
@@ -834,7 +825,7 @@ export default function LiveViolationsPage() {
         violations={violations}
         vehicleNo={paymentVehicleNo}
         challanId={`SMVB-${Date.now().toString().slice(-8)}`}
-        totalFine={getVehicleTotalFine(paymentVehicleNo, violations)}
+        totalFine={(vehicleScoreMap.get(paymentVehicleNo) ?? 0) * 1000}
         groupId={paymentGroupId}
         onPaymentSuccess={handlePaymentSuccess}
       />

@@ -321,8 +321,8 @@ export async function payViolation(id: string): Promise<void> {
 }
 
 // Legacy function for ChallanManagementPage compatibility
-export async function fetchChallans() {
-  return [];
+export async function fetchChallans(): Promise<any[]> {
+  return fetchChallansFromBackend();
 }
 
 export async function fetchStats(): Promise<{
@@ -339,5 +339,47 @@ export async function fetchStats(): Promise<{
     return await res.json();
   } catch {
     return null;
+  }
+}
+
+export async function fetchEvents(): Promise<NodeViolation[]> {
+  try {
+    const response = await fetch(`${API_BASE}/api/events`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data.map(normalizeViolation) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchAccidents(): Promise<NodeViolation[]> {
+  try {
+    const response = await fetch(`${API_BASE}/api/accidents`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data.map(normalizeViolation) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchChallansFromBackend(): Promise<any[]> {
+  try {
+    const response = await fetch(`${API_BASE}/api/challans`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
   }
 }
